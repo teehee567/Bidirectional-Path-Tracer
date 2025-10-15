@@ -11,9 +11,8 @@ param(
   [string]$Config = "Debug",
   [switch]$Static,
   [switch]$Clean,
-  [switch]$Verbose,
 
-  [Alias("r")]
+  [Alias("R")]
   [switch]$Run,
 
   [Parameter(ValueFromRemainingArguments = $true)]
@@ -97,7 +96,7 @@ if ($Static) {
   $crt = ("MultiThreaded" + $(if ($Config -eq "Debug") { "Debug" } else { "" }))
   $cfg += "-DCMAKE_MSVC_RUNTIME_LIBRARY=$crt"
 }
-if ($Verbose) { $cfg += @("-DCMAKE_FIND_DEBUG_MODE=ON","-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE") }
+# if ($Verbose) { $cfg += @("-DCMAKE_FIND_DEBUG_MODE=ON","-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE") }
 
 Info "Configuring CMake for MSVC..."
 cmake @cfg
@@ -115,10 +114,13 @@ if ($exe) {
   Write-Host "Run: `"$($exe.FullName)`" $($RunArgs -join ' ')"
   if ($Run) {
     Info "Running…"
-    Push-Location $exe.DirectoryName
-    & $exe.FullName @RunArgs
-    $code = $LASTEXITCODE
-    Pop-Location
+    $wd = $exe.DirectoryName
+    $p = Start-Process -FilePath $exe.FullName `
+                      -ArgumentList $RunArgs `
+                      -WorkingDirectory $wd `
+                      -NoNewWindow -PassThru
+    $p.WaitForExit()
+    $code = $p.ExitCode
     if ($code -ne 0) { Die "Program exited with code $code" }
   }
 } else {
