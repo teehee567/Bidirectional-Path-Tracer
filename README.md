@@ -1,2 +1,2 @@
 # Bidirectional-Path-Tracer
-hi
+chat look at wiki
