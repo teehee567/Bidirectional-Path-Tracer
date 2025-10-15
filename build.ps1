@@ -11,7 +11,13 @@ param(
   [string]$Config = "Debug",
   [switch]$Static,
   [switch]$Clean,
-  [switch]$Verbose
+  [switch]$Verbose,
+
+  [Alias("r")]
+  [switch]$Run,
+
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$RunArgs
 )
 
 $ErrorActionPreference = "Stop"
@@ -106,7 +112,15 @@ if ($LASTEXITCODE -ne 0) { Die "Build failed" }
 $exe = Get-ChildItem "$BuildDir\$Config\RayTracer.exe" -ErrorAction SilentlyContinue
 if ($exe) {
   Ok "Build complete → $($exe.FullName)"
-  Write-Host "Run: `"$($exe.FullName)`""
+  Write-Host "Run: `"$($exe.FullName)`" $($RunArgs -join ' ')"
+  if ($Run) {
+    Info "Running…"
+    Push-Location $exe.DirectoryName
+    & $exe.FullName @RunArgs
+    $code = $LASTEXITCODE
+    Pop-Location
+    if ($code -ne 0) { Die "Program exited with code $code" }
+  }
 } else {
   Warn "Build succeeded but RayTracer.exe not found in $BuildDir\$Config"
 }
