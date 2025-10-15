@@ -1,3 +1,5 @@
+.DS_Store
+
 # vcpkg build artifacts
 vcpkg_installed/
 build/
