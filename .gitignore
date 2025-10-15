@@ -1,3 +1,24 @@
+# vcpkg build artifacts
+vcpkg_installed/
+build/
+CMakeCache.txt
+CMakeFiles/
+
+# Optional: the vcpkg binary itself and downloads
+# /vcpkg/
+# /vcpkg_downloads/
+# /vcpkg_buildtrees/
+# /vcpkg_packages/
+
+# Visual Studio temporary stuff
+*.VC.db
+*.VC.VC.opendb
+*.user
+*.suo
+*.pdb
+
+# Ignore output images
+
 # Prerequisites
 *.d
 
