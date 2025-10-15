@@ -1,4 +1,4 @@
-<#  build.ps1 — full MSVC + vcpkg setup/build script
+<#  build.ps1 - full MSVC + vcpkg setup/build script
     Usage:
       ./build.ps1               # Debug, dynamic (DLLs)
       ./build.ps1 -Static       # Static (no DLLs)
@@ -11,17 +11,14 @@ param(
   [string]$Config = "Debug",
   [switch]$Static,
   [switch]$Clean,
-
-  [Alias("R")]
-  [switch]$Run,
-
-  [Parameter(ValueFromRemainingArguments = $true)]
-  [string[]]$RunArgs
+  [switch]$Verbose
 )
 
 $ErrorActionPreference = "Stop"
-$PSStyle.OutputRendering = "Ansi"
-function Info($m){ Write-Host "[INFO] $m" -ForegroundColor Cyan }
+# Enable ANSI colors only on PowerShell 7+
+if ($PSVersionTable.PSVersion.Major -ge 7) {
+  $PSStyle.OutputRendering = 'Ansi'
+}function Info($m){ Write-Host "[INFO] $m" -ForegroundColor Cyan }
 function Ok($m){ Write-Host "[OK]   $m" -ForegroundColor Green }
 function Warn($m){ Write-Host "[WARN] $m" -ForegroundColor Yellow }
 function Die($m){ Write-Host "[ERR]  $m" -ForegroundColor Red; exit 1 }
@@ -50,18 +47,18 @@ New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-
 # ensure valid vcpkg submodule
 if (-not (Test-Path "$Root\vcpkg\.git")) {
   if (Test-Path "$Root\vcpkg") { Remove-Item -Recurse -Force "$Root\vcpkg" }
-  Info "Cloning vcpkg submodule…"
+  Info "Cloning vcpkg submodule..."
   git submodule add https://github.com/microsoft/vcpkg vcpkg | Out-Null
   git submodule update --init --recursive | Out-Null
 }
 if (-not (Test-Path "$Root\vcpkg\bootstrap-vcpkg.bat")) {
-  Info "Initializing vcpkg…"
+  Info "Initializing vcpkg..."
   git submodule update --init --recursive | Out-Null
 }
 
 # bootstrap if missing
 if (-not (Test-Path "$Root\vcpkg\vcpkg.exe")) {
-  Info "Bootstrapping vcpkg (MSVC)…"
+  Info "Bootstrapping vcpkg (MSVC)..."
   & "$Root\vcpkg\bootstrap-vcpkg.bat"
   if ($LASTEXITCODE -ne 0) { Die "vcpkg bootstrap failed" }
 }
@@ -69,10 +66,10 @@ Ok "vcpkg ready"
 
 # install deps
 if (Test-Path "$Root\vcpkg.json") {
-  Info "Installing dependencies from manifest ($Triplet)…"
+  Info "Installing dependencies from manifest ($Triplet)..."
   & "$Root\vcpkg\vcpkg.exe" install --triplet $Triplet
 } else {
-  Warn "vcpkg.json not found — installing libpng + zlib"
+  Warn "vcpkg.json not found - installing libpng + zlib"
   & "$Root\vcpkg\vcpkg.exe" install libpng zlib --triplet $Triplet --classic
 }
 if ($LASTEXITCODE -ne 0) { Die "vcpkg install failed" }
@@ -92,37 +89,28 @@ $cfg = @(
   "-DCMAKE_TOOLCHAIN_FILE=$Toolchain",
   "-DVCPKG_TARGET_TRIPLET=$Triplet"
 )
+# --- MSVC CRT selection (static) ---
 if ($Static) {
-  $crt = ("MultiThreaded" + $(if ($Config -eq "Debug") { "Debug" } else { "" }))
-  $cfg += "-DCMAKE_MSVC_RUNTIME_LIBRARY=$crt"
+  # Works for Debug/Release in multi-config generators
+  $cfg += '-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded$<$<CONFIG:Debug>:Debug>'
 }
-# if ($Verbose) { $cfg += @("-DCMAKE_FIND_DEBUG_MODE=ON","-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE") }
 
+# --- configure & build (unchanged) ---
 Info "Configuring CMake for MSVC..."
 cmake @cfg
 if ($LASTEXITCODE -ne 0) { Die "CMake configure failed" }
 
-# build
 Info "Building..."
 cmake --build $BuildDir --config $Config -- /m
 if ($LASTEXITCODE -ne 0) { Die "Build failed" }
 
-# locate exe
-$exe = Get-ChildItem "$BuildDir\$Config\RayTracer.exe" -ErrorAction SilentlyContinue
-if ($exe) {
-  Ok "Build complete → $($exe.FullName)"
-  Write-Host "Run: `"$($exe.FullName)`" $($RunArgs -join ' ')"
-  if ($Run) {
-    Info "Running…"
-    $wd = $exe.DirectoryName
-    $p = Start-Process -FilePath $exe.FullName `
-                      -ArgumentList $RunArgs `
-                      -WorkingDirectory $wd `
-                      -NoNewWindow -PassThru
-    $p.WaitForExit()
-    $code = $p.ExitCode
-    if ($code -ne 0) { Die "Program exited with code $code" }
-  }
+# --- locate exe (ASCII only, no smart punctuation) ---
+$exePath = Join-Path (Join-Path $BuildDir $Config) "RayTracer.exe"
+if (Test-Path $exePath) {
+  Ok ("Build complete -> " + $exePath)
+  Write-Host ("Run: `"" + $exePath + "`"")
 } else {
-  Warn "Build succeeded but RayTracer.exe not found in $BuildDir\$Config"
+  Warn ("Build succeeded but RayTracer.exe not found in " + (Join-Path $BuildDir $Config))
 }
+
+
