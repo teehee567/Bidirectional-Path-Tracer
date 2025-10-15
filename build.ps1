@@ -11,7 +11,10 @@ param(
   [string]$Config = "Debug",
   [switch]$Static,
   [switch]$Clean,
-  [switch]$Verbose
+
+  [Alias("R")]
+  [switch]$Run
+
 )
 
 $ErrorActionPreference = "Stop"
@@ -108,9 +111,13 @@ if ($LASTEXITCODE -ne 0) { Die "Build failed" }
 $exePath = Join-Path (Join-Path $BuildDir $Config) "RayTracer.exe"
 if (Test-Path $exePath) {
   Ok ("Build complete -> " + $exePath)
-  Write-Host ("Run: `"" + $exePath + "`"")
+  Write-Host ("Run: `"$exePath`"")
+  if ($Run) {
+    Info "Running…"
+    & $exePath            # runs in the current console window
+    $code = $LASTEXITCODE # capture the exe's exit code
+    if ($code -ne 0) { Die "Program exited with code $code" }
+  }
 } else {
   Warn ("Build succeeded but RayTracer.exe not found in " + (Join-Path $BuildDir $Config))
 }
-
-
