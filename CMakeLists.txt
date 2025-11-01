@@ -3,6 +3,7 @@ project(RayTracer)
 set(CMAKE_CXX_STANDARD 17)
 
 find_package(PNG REQUIRED)
+find_package(yaml-cpp CONFIG REQUIRED)
 
 # Pick up all .cpp sources (add CONFIGURE_DEPENDS so it reconfigures when files are added)
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
@@ -27,6 +28,7 @@ target_include_directories(RayTracer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objects/primatives
     ${CMAKE_CURRENT_SOURCE_DIR}/src/objects
     ${CMAKE_CURRENT_SOURCE_DIR}/src/acceleration
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/scene
 )
 
-target_link_libraries(RayTracer PRIVATE PNG::PNG)
+target_link_libraries(RayTracer PRIVATE PNG::PNG yaml-cpp)
