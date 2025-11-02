@@ -3,6 +3,8 @@
 
 #include "main.h"
 #include "hittable.h"
+#include "hittable_list.h"
+#include "stats.h"
 
 #include <array>
 #include <vector>
@@ -30,6 +32,7 @@ class triangle : public hittable {
     }
 
     bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+        bvh_stats().triangle_tests.fetch_add(1, std::memory_order_relaxed);
         const double epsilon = 1e-8;
 
         vec3 pvec = cross(r.direction(), edge2);
@@ -59,7 +62,7 @@ class triangle : public hittable {
         rec.v = v;
         rec.mat = mat;
         rec.set_face_normal(r, normal);
-
+        bvh_stats().triangle_hits.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
 
@@ -160,6 +163,14 @@ class triangle_collection : public hittable {
 
         auto idx = random_int(0, static_cast<int>(tris.size()) - 1);
         return tris[idx].random(origin);
+    }
+
+    hittable_list to_hittable_list() const {
+        hittable_list list;
+        for (const auto& tri : tris) {
+            list.add(make_shared<triangle>(tri));
+        }
+        return list;
     }
 
   private:

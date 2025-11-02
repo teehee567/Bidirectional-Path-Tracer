@@ -6,6 +6,7 @@
 #include "main.h"
 #include "material.h"
 #include "wpng.h"
+#include "stats.h"
 
 #include <chrono>
 #include <string>
@@ -22,7 +23,7 @@ class camera {
   public:
     double aspect_ratio = 1.0;  // Ratio of image width over height
     int    image_width  = 100;  // Rendered image width in pixel count
-    int    samples_per_pixel = 10;   // Count of random samples for each pixel
+    int    samples_per_pixel = 50;   // Count of random samples for each pixel
     int    max_depth         = 10;   // Maximum number of ray bounces into scene
     color  background;               // Scene background color
 
@@ -42,6 +43,8 @@ class camera {
 
         using clock = std::chrono::steady_clock;
         auto t0 = clock::now();
+
+        reset_bvh_stats();
 
         const int W = image_width;
         const int H = image_height;
@@ -132,8 +135,11 @@ class camera {
         reporter.join();
 
         std::vector<uint8_t> rgb;
-        colors_to_rgb8(framebuffer, image_width, image_height, samples_per_pixel, rgb);
+        const int used_samples_per_pixel = std::max(1, sqrt_spp * sqrt_spp);
+        colors_to_rgb8(framebuffer, image_width, image_height, used_samples_per_pixel, rgb);
         write_png(file_name.c_str(), rgb, image_width, image_height);
+
+        print_bvh_stats(std::clog);
     }
 
   private:
@@ -227,6 +233,7 @@ class camera {
 
     color ray_color(const ray& r, int depth, const hittable& world, const hittable& lights)
     const {
+        bvh_stats().rays_traced.fetch_add(1, std::memory_order_relaxed);
         // If we've exceeded the ray bounce limit, no more light is gathered.
         if (depth <= 0)
             return color(0,0,0);

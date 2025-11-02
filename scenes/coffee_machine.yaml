@@ -1,41 +1,30 @@
 camera:
   resolution: [800, 800]
-  focal_length: 2
-  focus_distance: 1
+  fov: 30
   aperture_radius: 0
   location: [-0.0029600381385535, 0.19830328226089478, 0.828150749206543]
   look_at: [0.002896534511819482, 0.16660931706428528, 0.022717338055372238]
 
 materials:
   Plastic_Orange:
-    base_colour: [255, 97, 3]
-    roughness: 0.0
-    metallic: 1.0
-    sheen: 0.0
-    clearcoat: 1.
-    specular_tint: 0.0
-    ior: 1.5
-  Plastic_Black: 
-    base_colour: [0, 0, 0]
-    roughness: 0.001
-    metallic: 0.1
-    specular_tint: 0.0063
-    ior: 1.5
+    type: lambertian
+    color: [255, 97, 3]
+  Plastic_Black:
+    type: lambertian
+    color: [0, 0, 0]
   Glass:
-    roughness: 0.0
-    clearcoat: 1.
-    spec_trans: 1.0
+    type: dielectric
     ior: 1.5
   Metal:
-    base_colour: [170, 170, 170]
-    metallic: 1.0
-    roughness: 0.0
+    type: metal
+    color: [170, 170, 170]
+    roughness: 0.1
   Floor:
-    base_colour: [147, 147, 147]
-    specular_tint: 0.5786
-    ior: 1.5
+    type: lambertian
+    color: [147, 147, 147]
   Light:
-    emission: [25500, 25500, 25500]
+    type: light
+    emission: [245, 245, 245]
 surfaces:
   - type: "object"
     smooth: true

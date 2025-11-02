@@ -41,8 +41,8 @@ void cornell_box() {
 
     cam.aspect_ratio      = 1.0;
     cam.image_width       = 800;
-    cam.samples_per_pixel = 100;
-    cam.max_depth         = 50;
+    cam.samples_per_pixel = 5;
+    cam.max_depth         = 10;
     cam.background        = color(0,0,0);
 
     cam.vfov     = 40;
@@ -55,15 +55,17 @@ void cornell_box() {
     cam.progress_bar_length = 30;
     cam.file_name = "cornell_box.png";
 
-    cam.render(world, lights);
+    auto world_bvh = make_shared<bvh_node>(world.to_hittable_list());
+    cam.render(*world_bvh, lights);
 }
 
 int main(int argc, char** argv) {
     try {
         if (argc > 1) {
             auto scene = load_scene_from_yaml(argv[1]);
+            auto world_bvh = make_shared<bvh_node>(scene.world.to_hittable_list());
             const triangle_collection& lights = scene.lights.empty() ? scene.world : scene.lights;
-            scene.cam.render(scene.world, lights);
+            scene.cam.render(*world_bvh, lights);
         } else {
             cornell_box();
         }
