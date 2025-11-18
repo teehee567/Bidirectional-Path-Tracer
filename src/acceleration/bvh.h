@@ -4,6 +4,7 @@
 #include "aabb.h"
 #include "hittable.h"
 #include "hittable_list.h"
+#include "stats.h"
 
 #include <algorithm>
 
@@ -17,6 +18,7 @@ class bvh_node : public hittable {
     }
 
     bvh_node(std::vector<shared_ptr<hittable>>& objects, size_t start, size_t end) {
+        bvh_stats().bvh_nodes_built.fetch_add(1, std::memory_order_relaxed);
         // Build the bounding box of the span of source objects.
         bbox = aabb::empty;
         for (size_t object_index=start; object_index < end; object_index++)
@@ -46,6 +48,7 @@ class bvh_node : public hittable {
     }
 
     bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+        bvh_stats().bvh_node_visits.fetch_add(1, std::memory_order_relaxed);
         if (!bbox.hit(r, ray_t))
             return false;
 

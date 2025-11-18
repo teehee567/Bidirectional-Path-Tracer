@@ -1,6 +1,8 @@
 #ifndef AABB_H
 #define AABB_H
 
+#include "stats.h"
+
 class aabb {
   public:
     interval x, y, z;
@@ -37,6 +39,7 @@ class aabb {
     }
 
     bool hit(const ray& r, interval ray_t) const {
+        bvh_stats().aabb_tests.fetch_add(1, std::memory_order_relaxed);
         const point3& ray_orig = r.origin();
         const vec3&   ray_dir  = r.direction();
 
@@ -58,6 +61,7 @@ class aabb {
             if (ray_t.max <= ray_t.min)
                 return false;
         }
+        bvh_stats().aabb_hits.fetch_add(1, std::memory_order_relaxed);
         return true;
     }
 
