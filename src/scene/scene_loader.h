@@ -120,7 +120,8 @@ inline std::shared_ptr<material> build_material(const YAML::Node& node) {
         );
 
         if (type_str == "light" || type_str == "diffuse_light") {
-            color emission = read_color_node_scaled(node["emission"], color_value);
+            // For lights, treat emission as linear HDR. No 0–255 scaling.
+            color emission = read_color_node(node["emission"], default_color);
             return std::make_shared<diffuse_light>(emission);
         } else if (type_str == "lambertian") {
             return std::make_shared<lambertian>(color_value);

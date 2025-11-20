@@ -6,6 +6,13 @@
 #include "hittable_list.h"
 #include "stats.h"
 
+struct surface_sample {
+    point3 position;
+    vec3 normal;
+    shared_ptr<material> mat;
+    double pdf;
+};
+
 #include <array>
 #include <vector>
 
@@ -97,6 +104,22 @@ class triangle : public hittable {
 
     double surface_area() const { return area; }
 
+    void sample(surface_sample& sample) const {
+        double u = random_double();
+        double v = random_double();
+
+        if (u + v > 1.0) {
+            u = 1.0 - u;
+            v = 1.0 - v;
+        }
+
+        sample.position = v0 + (u * edge1) + (v * edge2);
+        sample.normal = normal;
+        sample.mat = mat;
+    }
+
+    shared_ptr<material> material_ptr() const { return mat; }
+
   private:
     point3 v0;
     point3 v1;
@@ -172,6 +195,34 @@ class triangle_collection : public hittable {
         }
         return list;
     }
+
+    bool sample_surface(surface_sample& sample) const {
+        if (tris.empty())
+            return false;
+
+        double total_area = 0.0;
+        for (const auto& tri : tris)
+            total_area += tri.surface_area();
+
+        if (total_area <= 0.0)
+            return false;
+
+        double pick = random_double(0.0, total_area);
+        const triangle* chosen = &tris.back();
+        double accum = 0.0;
+        for (const auto& tri : tris) {
+            accum += tri.surface_area();
+            if (pick <= accum) {
+                chosen = &tri;
+                break;
+            }
+        }
+
+        chosen->sample(sample);
+        sample.pdf = 1.0 / total_area;
+        return true;
+    }
+
 
   private:
     std::vector<triangle> tris;

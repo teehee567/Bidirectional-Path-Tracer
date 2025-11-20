@@ -7,6 +7,8 @@
 #include "material.h"
 #include "wpng.h"
 #include "stats.h"
+#include "triangle.h"
+#include "onb.h"
 
 #include <chrono>
 #include <string>
@@ -231,8 +233,26 @@ class camera {
         return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
     }
 
+    struct path_vertex {
+        hit_record rec;
+        color throughput;
+        vec3 wi;
+        color emission;
+        bool delta = false;
+        bool is_light = false;
+    };
+
     color ray_color(const ray& r, int depth, const hittable& world, const hittable& lights)
     const {
+        const auto* light_meshes = dynamic_cast<const triangle_collection*>(&lights);
+        if (!light_meshes) {
+            return path_trace_color(r, depth, world, lights);
+        }
+
+        return bidirectional_color(r, depth, world, *light_meshes);
+    }
+
+    color path_trace_color(const ray& r, int depth, const hittable& world, const hittable& lights) const {
         bvh_stats().rays_traced.fetch_add(1, std::memory_order_relaxed);
         // If we've exceeded the ray bounce limit, no more light is gathered.
         if (depth <= 0)
@@ -251,7 +271,7 @@ class camera {
             return color_from_emission;
 
         if (srec.skip_pdf) {
-            return srec.attenuation * ray_color(srec.skip_pdf_ray, depth-1, world, lights);
+            return srec.attenuation * path_trace_color(srec.skip_pdf_ray, depth - 1, world, lights);
         }
         
         auto light_ptr = make_shared<hittable_pdf>(lights, rec.p);
@@ -259,14 +279,199 @@ class camera {
 
         ray scattered = ray(rec.p, p.generate(), r.time());
         auto pdf_value = p.value(scattered.direction());
+        if (pdf_value <= 0)
+            return color_from_emission;
 
         double scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
 
-        color sample_color = ray_color(scattered, depth-1, world, lights);
+        color sample_color = path_trace_color(scattered, depth-1, world, lights);
         color color_from_scatter =
             (srec.attenuation * scattering_pdf * sample_color) / pdf_value;
 
         return color_from_emission + color_from_scatter;
+    }
+
+    color bidirectional_color(
+        const ray& r,
+        int depth,
+        const hittable& world,
+        const triangle_collection& light_collection
+    ) const {
+        std::vector<path_vertex> camera_path;
+        camera_path.reserve(depth);
+        color background_contrib(0,0,0);
+        trace_path(r, depth, world, camera_path, color(1,1,1), &background_contrib);
+
+        color result = background_contrib;
+        for (const auto& vertex : camera_path) {
+            if (!vertex.delta && vertex.emission.length_squared() > 0)
+                result += vertex.throughput * vertex.emission;
+        }
+
+        std::vector<path_vertex> light_path;
+        light_path.reserve(depth);
+        if (!build_light_path(world, light_collection, depth, light_path))
+            return result;
+
+        for (const auto& cam_vertex : camera_path) {
+            for (const auto& light_vertex : light_path) {
+                result += connect_vertices(cam_vertex, light_vertex, world);
+            }
+        }
+
+        return result;
+    }
+
+    void trace_path(
+        ray current,
+        int depth,
+        const hittable& world,
+        std::vector<path_vertex>& path,
+        color throughput,
+        color* background_contrib
+    ) const {
+        for (int bounce = 0; bounce < depth; ++bounce) {
+            bvh_stats().rays_traced.fetch_add(1, std::memory_order_relaxed);
+            hit_record rec;
+            if (!world.hit(current, interval(0.001, infinity), rec)) {
+                if (background_contrib)
+                    *background_contrib += throughput * background;
+                break;
+            }
+
+            path_vertex vertex;
+            vertex.rec = rec;
+            vertex.throughput = throughput;
+            vertex.wi = unit_vector(-current.direction());
+            vertex.emission = rec.mat->emitted(current, rec, rec.u, rec.v, rec.p);
+            vertex.delta = rec.mat->is_delta();
+            vertex.is_light = (std::dynamic_pointer_cast<diffuse_light>(rec.mat) != nullptr);
+            path.push_back(vertex);
+
+            scatter_record srec;
+            if (!rec.mat->scatter(current, rec, srec))
+                break;
+
+            if (srec.skip_pdf) {
+                throughput = throughput * srec.attenuation;
+                current = srec.skip_pdf_ray;
+                continue;
+            }
+
+            ray scattered(rec.p, srec.pdf_ptr->generate(), current.time());
+            auto pdf_value = srec.pdf_ptr->value(scattered.direction());
+            if (pdf_value <= 0)
+                break;
+
+            double scattering_pdf = rec.mat->scattering_pdf(current, rec, scattered);
+            throughput = throughput * srec.attenuation * scattering_pdf / pdf_value;
+            current = scattered;
+        }
+    }
+
+    bool build_light_path(
+        const hittable& world,
+        const triangle_collection& light_collection,
+        int depth,
+        std::vector<path_vertex>& path
+    ) const {
+        if (depth <= 0 || light_collection.empty())
+            return false;
+
+        surface_sample sample;
+        if (!light_collection.sample_surface(sample))
+            return false;
+
+        hit_record light_rec;
+        light_rec.p = sample.position;
+        light_rec.normal = sample.normal;
+        light_rec.mat = sample.mat;
+        light_rec.front_face = true;
+        light_rec.u = 0;
+        light_rec.v = 0;
+
+        ray light_ray_origin(sample.position, sample.normal, 0.0);
+        color emission = sample.mat->emitted(light_ray_origin, light_rec, 0, 0, sample.position);
+        if (emission.length_squared() <= 0)
+            return false;
+
+        path_vertex emitter_vertex;
+        emitter_vertex.rec = light_rec;
+        emitter_vertex.throughput = color(1.0, 1.0, 1.0) / std::max(sample.pdf, 1e-8);
+        emitter_vertex.wi = light_rec.normal;
+        emitter_vertex.emission = emission;
+        emitter_vertex.delta = false;
+        emitter_vertex.is_light = true;
+        path.push_back(emitter_vertex);
+
+        vec3 dir = sample_cosine_hemisphere(light_rec.normal);
+        vec3 dir_unit = unit_vector(dir);
+        double cos_theta = std::max(0.0, dot(light_rec.normal, dir_unit));
+        if (cos_theta <= 0)
+            return true;
+
+        double pdf_dir = std::max(cos_theta / pi, 1e-8);
+        color throughput = emitter_vertex.throughput * emission * (cos_theta / pdf_dir);
+        ray light_ray(light_rec.p + (0.001 * light_rec.normal), dir_unit, 0.0);
+        trace_path(light_ray, depth - 1, world, path, throughput, nullptr);
+        return true;
+    }
+
+    vec3 sample_cosine_hemisphere(const vec3& normal) const {
+        onb basis(normal);
+        return basis.transform(random_cosine_direction());
+    }
+
+    bool visible(const point3& a, const point3& b, const hittable& world) const {
+        vec3 dir = b - a;
+        double dist = dir.length();
+        if (dist <= 0)
+            return false;
+
+        vec3 dir_unit = dir / dist;
+        ray shadow_ray(a + (0.001 * dir_unit), dir_unit, 0.0);
+        hit_record tmp;
+        double max_t = dist - 0.001;
+        if (max_t <= 0)
+            return false;
+        return !world.hit(shadow_ray, interval(0.001, max_t), tmp);
+    }
+
+    color connect_vertices(const path_vertex& cam_v, const path_vertex& light_v, const hittable& world) const {
+        if (cam_v.delta || light_v.delta)
+            return color(0,0,0);
+
+        vec3 dir = light_v.rec.p - cam_v.rec.p;
+        double dist2 = dir.length_squared();
+        if (dist2 <= 0)
+            return color(0,0,0);
+
+        vec3 dir_unit = unit_vector(dir);
+        double cos_cam = std::fabs(dot(cam_v.rec.normal, dir_unit));
+        double cos_light = std::fabs(dot(light_v.rec.normal, -dir_unit));
+        if (cos_cam <= 0 || cos_light <= 0)
+            return color(0,0,0);
+
+        if (!visible(cam_v.rec.p, light_v.rec.p, world))
+            return color(0,0,0);
+
+        color f_cam = cam_v.rec.mat->evaluate_bsdf(cam_v.rec, cam_v.wi, dir_unit);
+        if (f_cam.length_squared() <= 0)
+            return color(0,0,0);
+
+        color f_light;
+        if (light_v.is_light) {
+            f_light = light_v.emission;
+        } else {
+            f_light = light_v.rec.mat->evaluate_bsdf(light_v.rec, light_v.wi, -dir_unit);
+        }
+        if (f_light.length_squared() <= 0)
+            return color(0,0,0);
+
+        color contrib = cam_v.throughput * f_cam;
+        contrib = contrib * light_v.throughput * f_light;
+        contrib = contrib * (cos_cam * cos_light) / dist2;
+        return contrib;
     }
 };
 

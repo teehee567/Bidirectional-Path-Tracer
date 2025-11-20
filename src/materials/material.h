@@ -31,6 +31,12 @@ class material {
     const {
         return 0;
     }
+
+    virtual color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const {
+        return color(0,0,0);
+    }
+
+    virtual bool is_delta() const { return false; }
 };
 
 class lambertian : public material {
@@ -49,6 +55,11 @@ class lambertian : public material {
     const override {
         auto cos_theta = dot(rec.normal, unit_vector(scattered.direction()));
         return cos_theta < 0 ? 0 : cos_theta/pi;
+    }
+
+    color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const override {
+        auto albedo = tex->value(rec.u, rec.v, rec.p);
+        return albedo / pi;
     }
 
   private:
@@ -70,6 +81,8 @@ class metal : public material {
 
         return true;
     }
+
+    bool is_delta() const override { return true; }
 
   private:
     color albedo;
@@ -101,6 +114,8 @@ class dielectric : public material {
         srec.skip_pdf_ray = ray(rec.p, direction, r_in.time());
         return true;
     }
+
+    bool is_delta() const override { return true; }
 
   private:
     // Refractive index in vacuum or air, or the ratio of the material's refractive index over
@@ -146,6 +161,10 @@ class isotropic : public material {
     double scattering_pdf(const ray& r_in, const hit_record& rec, const ray& scattered)
     const override {
         return 1 / (4 * pi);
+    }
+
+    color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const override {
+        return tex->value(rec.u, rec.v, rec.p) / (4 * pi);
     }
 
   private:
