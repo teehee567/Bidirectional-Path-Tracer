@@ -3,8 +3,8 @@
 
 #include "main.h"
 #include "camera.h"
+#include "material.h"
 #include "triangle.h"
-#include "bxdf_material.h"
 
 #include <yaml-cpp/yaml.h>
 
@@ -71,6 +71,16 @@ inline std::vector<double> node_to_double_list(const YAML::Node& node) {
     return values;
 }
 
+inline bool node_to_bool(const YAML::Node& node, bool def = false) {
+    if (!node)
+        return def;
+    try {
+        return node.as<bool>();
+    } catch (...) {
+        return def;
+    }
+}
+
 inline color read_color_node(const YAML::Node& node, const color& fallback) {
     auto values = node_to_double_list(node);
     if (values.size() < 3)
@@ -103,138 +113,66 @@ inline std::shared_ptr<material> build_material(const YAML::Node& node) {
     if (!node || !node.IsMap())
         throw std::runtime_error("Material must be a mapping");
 
-    const color default_color(0.0, 0.0, 0.0);
+    const color default_color(0.8, 0.8, 0.8);
+    DisneyMaterialParams params;
 
-    // Simple schema: type: lambertian|metal|dielectric|light with minimal params
-    // - lambertian: color/albedo
-    // - metal: color/albedo, roughness
-    // - dielectric: ior
-    // - light/diffuse_light: emission/color
-    // NEW BXDF TYPES:
-    // - lambertian_bxdf: albedo
-    // - specular_reflection: reflectance
-    // - specular_transmission: transmittance, eta_a, eta_b
-    // - ggx: ior, roughness
-    // - biggx: ior, roughness
-    // - mtl_ggx: diffuse, specular, roughness, ior, dissolve
-    // - mtl_ext_ggx: base_color, metallic, roughness, ior, dissolve
-    const std::string type_str = node_to_string(node["type"], "");
-    if (!type_str.empty()) {
-        // Normalize expected keys across synonyms
-        const color color_value = read_color_node_scaled(
-            node["color"],
-            read_color_node_scaled(node["albedo"],
-                read_color_node_scaled(node["base_color"],
-                    read_color_node_scaled(node["base_colour"], default_color)))
-        );
+    params.base_color = read_color_node_scaled(node["base_color"], default_color);
+    params.base_color = read_color_node_scaled(node["base_colour"], params.base_color);
+    params.base_color = read_color_node_scaled(node["albedo"], params.base_color);
+    params.base_color = read_color_node_scaled(node["color"], params.base_color);
 
-        // NEW BXDF MATERIAL TYPES
-        if (type_str == "lambertian_bxdf") {
-            auto bxdf = std::make_shared<LambertianBxDF>(color_value);
-            return std::make_shared<BxDFMaterial>(bxdf);
-        } else if (type_str == "specular_reflection") {
-            auto bxdf = std::make_shared<SpecularReflectionBxDF>(color_value);
-            return std::make_shared<BxDFMaterial>(bxdf);
-        } else if (type_str == "specular_transmission") {
-            double eta_a = node_to_double(node["eta_a"], 1.0);
-            double eta_b = node_to_double(node["eta_b"], 1.5);
-            // Also accept 'ior' as eta_b for convenience
-            if (node["ior"]) {
-                eta_b = node_to_double(node["ior"], 1.5);
-            }
-            auto bxdf = std::make_shared<SpecularTransmissionBxDF>(color_value, eta_a, eta_b);
-            return std::make_shared<BxDFMaterial>(bxdf);
-        } else if (type_str == "biggx") {
-            double ior = node_to_double(node["ior"], 1.5);
-            double roughness = std::clamp(node_to_double(node["roughness"], 0.1), 1e-4, 1.0);
-            auto bxdf = std::make_shared<BiGGX>(ior, roughness);
-            return std::make_shared<BxDFMaterial>(bxdf);
-        } else if (type_str == "ggx") {
-            // GGX takes F0 (Fresnel reflectance at normal incidence) and roughness
-            color f0 = read_color_node_scaled(node["f0"], color_value);
-            if (f0.length_squared() == 0.0) {
-                // If no F0 specified, use color/albedo as F0
-                f0 = color_value.length_squared() > 0 ? color_value : color(0.04, 0.04, 0.04);
-            }
-            double roughness = std::clamp(node_to_double(node["roughness"], 0.1), 1e-4, 1.0);
-            auto bxdf = std::make_shared<GGX>(f0, roughness);
-            return std::make_shared<BxDFMaterial>(bxdf);
-        } else if (type_str == "mtl_ggx") {
-            auto diffuse_tex = std::make_shared<solid_color>(
-                read_color_node_scaled(node["diffuse"], color_value)
-            );
-            auto specular_tex = std::make_shared<solid_color>(
-                read_color_node_scaled(node["specular"], color(1,1,1))
-            );
-            double roughness = std::clamp(node_to_double(node["roughness"], 0.1), 1e-4, 1.0);
-            double ior = node_to_double(node["ior"], 1.5);
-            double dissolve = std::clamp(node_to_double(node["dissolve"], 1.0), 0.0, 1.0);
-            auto bxdf = std::make_shared<MtlGGX>(diffuse_tex, specular_tex, roughness, ior, dissolve);
-            return std::make_shared<BxDFMaterial>(bxdf);
-        } else if (type_str == "mtl_ext_ggx") {
-            auto base_color_tex = std::make_shared<solid_color>(color_value);
-            double metallic_val = node_to_double(node["metallic"], 0.0);
-            auto metallic_tex = std::make_shared<solid_color>(
-                color(metallic_val, metallic_val, metallic_val)
-            );
-            double roughness_val = std::clamp(node_to_double(node["roughness"], 0.1), 1e-4, 1.0);
-            auto roughness_tex = std::make_shared<solid_color>(
-                color(roughness_val, roughness_val, roughness_val)
-            );
-            double ior = node_to_double(node["ior"], 1.5);
-            double dissolve = std::clamp(node_to_double(node["dissolve"], 1.0), 0.0, 1.0);
-            auto bxdf = std::make_shared<MtlExtGGX>(base_color_tex, metallic_tex, roughness_tex, ior, dissolve);
-            return std::make_shared<BxDFMaterial>(bxdf);
-        }
-        // OLD MATERIAL TYPES (for backward compatibility)
-        else if (type_str == "light" || type_str == "diffuse_light") {
-            // For lights, treat emission as linear HDR. No 0–255 scaling.
-            color emission = read_color_node(node["emission"], default_color);
-            return std::make_shared<diffuse_light>(emission);
-        } else if (type_str == "lambertian") {
-            return std::make_shared<lambertian>(color_value);
-        } else if (type_str == "metal") {
-            double roughness = std::clamp(node_to_double(node["roughness"], 0.0), 0.0, 1.0);
-            return std::make_shared<metal>(color_value, roughness);
-        } else if (type_str == "dielectric" || type_str == "glass") {
-            double ior = node_to_double(node["ior"], 1.5);
-            return std::make_shared<dielectric>(ior > 0.0 ? ior : 1.5);
-        }
-        // Unknown type: fall through to legacy mapping below
+    params.emission = read_color_node(node["emission"], params.emission);
+    params.transmittance_color = read_color_node_scaled(
+        node["transmittance_color"],
+        params.transmittance_color
+    );
+
+    params.metallic = node_to_double(node["metallic"], params.metallic);
+    params.roughness = node_to_double(node["roughness"], params.roughness);
+    params.specular_tint = node_to_double(node["specular_tint"], params.specular_tint);
+    params.sheen = node_to_double(node["sheen"], params.sheen);
+    params.sheen_tint = node_to_double(node["sheen_tint"], params.sheen_tint);
+    params.clearcoat = node_to_double(node["clearcoat"], params.clearcoat);
+    params.clearcoat_gloss = node_to_double(node["clearcoat_gloss"], params.clearcoat_gloss);
+    params.anisotropic = node_to_double(node["anisotropic"], params.anisotropic);
+    params.flatness = node_to_double(node["flatness"], params.flatness);
+    params.scatter_distance = node_to_double(node["scatter_distance"], params.scatter_distance);
+    params.relative_ior = node_to_double(node["relative_ior"], params.relative_ior);
+    params.ior = node_to_double(node["ior"], params.ior);
+    params.specular_transmission = node_to_double(node["spec_trans"], params.specular_transmission);
+    params.specular_transmission = node_to_double(node["transmission"], params.specular_transmission);
+    params.diffuse_transmission = node_to_double(node["diff_trans"], params.diffuse_transmission);
+    params.diffuse_transmission = node_to_double(node["diffuse_transmission"], params.diffuse_transmission);
+    params.thin = node_to_bool(node["thin"], params.thin);
+
+    const std::string type = node_to_string(node["type"], "disney");
+    if (type == "light" || type == "diffuse_light") {
+        params.emission = read_color_node(node["emission"], color(10.0, 10.0, 10.0));
+        params.base_color = color(0,0,0);
+        params.metallic = 0.0;
+        params.specular_transmission = 0.0;
+        params.diffuse_transmission = 0.0;
+    } else if (type == "lambertian" || type == "lambertian_bxdf") {
+        params.metallic = 0.0;
+        params.specular_transmission = 0.0;
+        params.diffuse_transmission = 0.0;
+        params.roughness = 1.0;
+    } else if (type == "metal" || type == "specular_reflection" || type == "ggx" || type == "biggx") {
+        params.metallic = 1.0;
+        params.specular_transmission = 0.0;
+        params.diffuse_transmission = 0.0;
+        params.roughness = node_to_double(node["roughness"], params.roughness);
+    } else if (type == "dielectric" || type == "glass" || type == "specular_transmission") {
+        params.metallic = 0.0;
+        params.specular_transmission = node_to_double(node["spec_trans"], 1.0);
+        params.diffuse_transmission = 0.0;
+        params.base_color = read_color_node_scaled(node["color"], color(1,1,1));
+        params.ior = node_to_double(node["ior"], params.ior);
+        params.relative_ior = params.ior;
+        params.roughness = std::clamp(node_to_double(node["roughness"], 0.0), 0.0, 1.0);
     }
 
-    // Legacy mapping: interpret common PBR-ish keys but produce simple materials
-    // Accept both base_color and base_colour, and scale 0-255 if necessary
-    color base_color = read_color_node_scaled(node["base_color"], default_color);
-    if (node["base_colour"]) {
-        base_color = read_color_node_scaled(node["base_colour"], base_color);
-    }
-    // Emission: if provided in 0-255 range, scale; otherwise accept absolute intensities
-    color emission   = read_color_node_scaled(node["emission"], default_color);
-
-    if (emission.length_squared() > 0.0) {
-        double maxc = std::max({std::fabs(emission.x()), std::fabs(emission.y()), std::fabs(emission.z())});
-        if (maxc > 50.0) {
-            emission *= (50.0 / maxc);
-        }
-        return std::make_shared<diffuse_light>(emission);
-    }
-
-    // Map common PBR-ish keys to simple materials
-    double transmission = node_to_double(node["transmission"], 0.0);
-    if (transmission == 0.0)
-        transmission = node_to_double(node["spec_trans"], 0.0);
-    double ior = node_to_double(node["ior"], 1.5);
-    if (transmission > 0.0)
-        return std::make_shared<dielectric>(ior > 0.0 ? ior : 1.5);
-
-    double metallic = node_to_double(node["metallic"], 0.0);
-    double roughness = std::clamp(node_to_double(node["roughness"], 0.0), 0.0, 1.0);
-    if (metallic > 0.5)
-        return std::make_shared<metal>(base_color, roughness);
-
-    // Default: diffuse
-    return std::make_shared<lambertian>(base_color);
+    return std::make_shared<DisneyMaterial>(params);
 }
 
 // Build materials map from a YAML mapping of name -> material_def
@@ -265,7 +203,7 @@ inline void add_triangle_with_lights(
 ) {
     triangle tri(v0, v1, v2, mat);
     world.add(tri);
-    if (std::dynamic_pointer_cast<diffuse_light>(mat))
+    if (mat && mat->is_emissive())
         lights.add(tri);
 }
 
@@ -394,7 +332,7 @@ inline void load_indexed_mesh(
             mat = build_material(mat_node);
         }
     }
-    if (!mat) mat = std::make_shared<lambertian>(color(0.8,0.8,0.8));
+    if (!mat) mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
 
     for (const auto& tri : tris_node) {
         std::vector<int> idx;
@@ -487,7 +425,7 @@ inline void load_object(
             mat = build_material(mat_node);
         }
     }
-    if (!mat) mat = std::make_shared<lambertian>(color(0.8,0.8,0.8));
+    if (!mat) mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
 
     load_obj_file(obj_path, mat, world, lights);
 }

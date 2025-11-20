@@ -223,6 +223,7 @@ class triangle_collection : public hittable {
         return true;
     }
 
+    const std::vector<triangle>& triangles() const { return tris; }
 
   private:
     std::vector<triangle> tris;

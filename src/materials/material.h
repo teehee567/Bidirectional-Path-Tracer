@@ -1,15 +1,17 @@
 #ifndef MATERIAL_H
 #define MATERIAL_H
 
+#include <algorithm>
+
+#include "bsdf.h"
 #include "hittable.h"
 #include "pdf.h"
-#include "texture.h"
 
 class scatter_record {
   public:
-    color attenuation;
+    color attenuation = color(1,1,1);
     shared_ptr<pdf> pdf_ptr;
-    bool skip_pdf;
+    bool skip_pdf = false;
     ray skip_pdf_ray;
 };
 
@@ -23,152 +25,274 @@ class material {
         return color(0,0,0);
     }
 
-    virtual bool scatter(const ray& r_in, const hit_record& rec, scatter_record& srec) const {
-        return false;
-    }
+    virtual bool scatter(const ray& r_in, const hit_record& rec, scatter_record& srec) const = 0;
 
     virtual double scattering_pdf(const ray& r_in, const hit_record& rec, const ray& scattered)
-    const {
-        return 0;
-    }
+    const = 0;
 
-    virtual color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const {
-        return color(0,0,0);
-    }
+    // NOTE: wi is the outgoing/view direction (toward the previous vertex), and wo is the
+    // sampled incoming direction (toward the next vertex). This matches the historical usage
+    // in the integrator.
+    virtual color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const = 0;
 
     virtual bool is_delta() const { return false; }
+    virtual bool is_emissive() const { return false; }
 };
 
-class lambertian : public material {
-  public:
-    lambertian(const color& albedo) : tex(make_shared<solid_color>(albedo)) {}
-    lambertian(shared_ptr<texture> tex) : tex(tex) {}
+struct DisneyMaterialParams {
+    color base_color{0.8, 0.8, 0.8};
+    color transmittance_color{1.0, 1.0, 1.0};
+    color emission{0.0, 0.0, 0.0};
 
-    bool scatter(const ray& r_in, const hit_record& rec, scatter_record& srec) const override {
-        srec.attenuation = tex->value(rec.u, rec.v, rec.p);
-        srec.pdf_ptr = make_shared<cosine_pdf>(rec.normal);
-        srec.skip_pdf = false;
-        return true;
-    }
-
-    double scattering_pdf(const ray& r_in, const hit_record& rec, const ray& scattered)
-    const override {
-        auto cos_theta = dot(rec.normal, unit_vector(scattered.direction()));
-        return cos_theta < 0 ? 0 : cos_theta/pi;
-    }
-
-    color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const override {
-        auto albedo = tex->value(rec.u, rec.v, rec.p);
-        return albedo / pi;
-    }
-
-  private:
-    shared_ptr<texture> tex;
+    double sheen = 0.0;
+    double sheen_tint = 0.5;
+    double clearcoat = 0.0;
+    double clearcoat_gloss = 1.0;
+    double metallic = 0.0;
+    double specular_transmission = 0.0;
+    double diffuse_transmission = 0.0;
+    double flatness = 0.0;
+    double anisotropic = 0.0;
+    double relative_ior = 1.5;
+    double specular_tint = 0.0;
+    double roughness = 0.5;
+    double scatter_distance = 1.0;
+    double ior = 1.5;
+    bool thin = false;
 };
 
-class metal : public material {
+class DisneyMaterial : public material {
   public:
-    metal(const color& albedo, double fuzz) : albedo(albedo), fuzz(fuzz < 1 ? fuzz : 1) {}
+    explicit DisneyMaterial(const DisneyMaterialParams& params)
+      : base_color(params.base_color),
+        transmittance_color(params.transmittance_color),
+        emission(params.emission),
+        sheen(params.sheen),
+        sheen_tint(params.sheen_tint),
+        clearcoat(params.clearcoat),
+        clearcoat_gloss(params.clearcoat_gloss),
+        metallic(params.metallic),
+        spec_trans(params.specular_transmission),
+        diff_trans(params.diffuse_transmission),
+        flatness(params.flatness),
+        anisotropic(params.anisotropic),
+        relative_ior(params.relative_ior),
+        specular_tint(params.specular_tint),
+        roughness(params.roughness),
+        scatter_distance(params.scatter_distance),
+        ior(params.ior),
+        thin(params.thin)
+    {}
 
-    bool scatter(const ray& r_in, const hit_record& rec, scatter_record& srec) const override {
-        vec3 reflected = reflect(r_in.direction(), rec.normal);
-        reflected = unit_vector(reflected) + (fuzz * random_unit_vector());
-
-        srec.attenuation = albedo;
-        srec.pdf_ptr = nullptr;
-        srec.skip_pdf = true;
-        srec.skip_pdf_ray = ray(rec.p, reflected, r_in.time());
-
-        return true;
-    }
-
-    bool is_delta() const override { return true; }
-
-  private:
-    color albedo;
-    double fuzz;
-};
-
-class dielectric : public material {
-  public:
-    dielectric(double refraction_index) : refraction_index(refraction_index) {}
-
-    bool scatter(const ray& r_in, const hit_record& rec, scatter_record& srec) const override {
-        srec.attenuation = color(1.0, 1.0, 1.0);
-        srec.pdf_ptr = nullptr;
-        srec.skip_pdf = true;
-        double ri = rec.front_face ? (1.0/refraction_index) : refraction_index;
-
-        vec3 unit_direction = unit_vector(r_in.direction());
-        double cos_theta = std::fmin(dot(-unit_direction, rec.normal), 1.0);
-        double sin_theta = std::sqrt(1.0 - cos_theta*cos_theta);
-
-        bool cannot_refract = ri * sin_theta > 1.0;
-        vec3 direction;
-
-        if (cannot_refract || reflectance(cos_theta, ri) > random_double())
-            direction = reflect(unit_direction, rec.normal);
-        else
-            direction = refract(unit_direction, rec.normal, ri);
-
-        srec.skip_pdf_ray = ray(rec.p, direction, r_in.time());
-        return true;
-    }
-
-    bool is_delta() const override { return true; }
-
-  private:
-    // Refractive index in vacuum or air, or the ratio of the material's refractive index over
-    // the refractive index of the enclosing media
-    double refraction_index;
-
-    static double reflectance(double cosine, double refraction_index) {
-        // Use Schlick's approximation for reflectance.
-        auto r0 = (1 - refraction_index) / (1 + refraction_index);
-        r0 = r0*r0;
-        return r0 + (1-r0)*std::pow((1 - cosine),5);
-    }
-};
-
-class diffuse_light : public material {
-  public:
-    diffuse_light(shared_ptr<texture> tex) : tex(tex) {}
-    diffuse_light(const color& emit) : tex(make_shared<solid_color>(emit)) {}
-
-    color emitted(const ray& r_in, const hit_record& rec, double u, double v, const point3& p)
-    const override {
+    color emitted(
+        const ray& r_in, const hit_record& rec, double u, double v, const point3& p
+    ) const override {
         if (!rec.front_face)
             return color(0,0,0);
-        return tex->value(u, v, p);
+        return emission;
     }
 
-  private:
-    shared_ptr<texture> tex;
-};
-
-class isotropic : public material {
-  public:
-    isotropic(const color& albedo) : tex(make_shared<solid_color>(albedo)) {}
-    isotropic(shared_ptr<texture> tex) : tex(tex) {}
-
-    bool scatter(const ray& r_in, const hit_record& rec, scatter_record& srec) const override {
-        srec.attenuation = tex->value(rec.u, rec.v, rec.p);
-        srec.pdf_ptr = make_shared<sphere_pdf>();
-        srec.skip_pdf = false;
-        return true;
-    }
+    bool scatter(const ray& r_in, const hit_record& rec, scatter_record& srec) const override;
 
     double scattering_pdf(const ray& r_in, const hit_record& rec, const ray& scattered)
-    const override {
-        return 1 / (4 * pi);
-    }
+    const override;
 
-    color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const override {
-        return tex->value(rec.u, rec.v, rec.p) / (4 * pi);
+    color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const override;
+
+    bool is_emissive() const override {
+        return emission.length_squared() > 0.0;
     }
 
   private:
-    shared_ptr<texture> tex;
+    friend class DisneyPdf;
+
+    bsdf::SurfaceParameters make_surface(const hit_record& rec, const vec3& view_dir) const;
+    glm::vec3 sample_direction(const hit_record& rec, const vec3& view_dir) const;
+    double pdf_value(const hit_record& rec, const vec3& view_dir, const vec3& sample_dir) const;
+
+    static glm::vec3 to_glm(const vec3& v) {
+        return glm::vec3(
+            static_cast<float>(v.x()),
+            static_cast<float>(v.y()),
+            static_cast<float>(v.z())
+        );
+    }
+
+    static vec3 from_glm(const glm::vec3& v) {
+        return vec3(v.x, v.y, v.z);
+    }
+
+    color base_color;
+    color transmittance_color;
+    color emission;
+
+    double sheen;
+    double sheen_tint;
+    double clearcoat;
+    double clearcoat_gloss;
+    double metallic;
+    double spec_trans;
+    double diff_trans;
+    double flatness;
+    double anisotropic;
+    double relative_ior;
+    double specular_tint;
+    double roughness;
+    double scatter_distance;
+    double ior;
+    bool thin;
 };
+
+class DisneyPdf : public pdf {
+  public:
+    DisneyPdf(const DisneyMaterial& material, const hit_record& rec, const vec3& view_dir)
+      : material(material),
+        rec(rec),
+        view_dir(unit_vector(view_dir))
+    {}
+
+    double value(const vec3& direction) const override {
+        return material.pdf_value(rec, view_dir, unit_vector(direction));
+    }
+
+    vec3 generate() const override {
+        glm::vec3 sampled = material.sample_direction(rec, view_dir);
+        if (glm::dot(sampled, sampled) == 0.0f)
+            return rec.normal;
+        return unit_vector(DisneyMaterial::from_glm(sampled));
+    }
+
+  private:
+    const DisneyMaterial& material;
+    hit_record rec;
+    vec3 view_dir;
+};
+
+inline bool DisneyMaterial::scatter(
+    const ray& r_in,
+    const hit_record& rec,
+    scatter_record& srec
+) const {
+    srec.attenuation = color(1,1,1);
+    srec.pdf_ptr = make_shared<DisneyPdf>(*this, rec, unit_vector(-r_in.direction()));
+    srec.skip_pdf = false;
+    return true;
+}
+
+inline double DisneyMaterial::scattering_pdf(
+    const ray& r_in,
+    const hit_record& rec,
+    const ray& scattered
+) const {
+    return pdf_value(rec, unit_vector(-r_in.direction()), unit_vector(scattered.direction()));
+}
+
+inline color DisneyMaterial::evaluate_bsdf(
+    const hit_record& rec,
+    const vec3& wi,
+    const vec3& wo
+) const {
+    bsdf::SurfaceParameters surface = make_surface(rec, wi);
+    float forwardPdf = 0.0f;
+    float reversePdf = 0.0f;
+    glm::vec3 reflectance = bsdf::EvaluateDisney(surface, to_glm(wi), to_glm(wo), thin, forwardPdf, reversePdf);
+
+    double cos_theta = std::max(1e-6, std::fabs(dot(rec.normal, wo)));
+    return from_glm(reflectance) / cos_theta;
+}
+
+inline bsdf::SurfaceParameters DisneyMaterial::make_surface(
+    const hit_record& rec,
+    const vec3& view_dir
+) const {
+    bsdf::SurfaceParameters surface;
+    glm::vec3 normal = to_glm(rec.normal);
+
+    surface.position = to_glm(rec.p);
+    surface.basis = utils::LocalBasis::from_normal(normal);
+    surface.worldToTangent = glm::transpose(surface.basis.transform);
+    surface.error = static_cast<float>(rec.t);
+    surface.view = to_glm(view_dir);
+    surface.baseColor = to_glm(base_color);
+    surface.transmittanceColor = to_glm(transmittance_color);
+    surface.sheen = static_cast<float>(sheen);
+    surface.sheenTint = static_cast<float>(sheen_tint);
+    surface.clearcoat = static_cast<float>(clearcoat);
+    surface.clearcoatGloss = static_cast<float>(clearcoat_gloss);
+    surface.metallic = static_cast<float>(metallic);
+    surface.specTrans = static_cast<float>(spec_trans);
+    surface.diffTrans = static_cast<float>(diff_trans);
+    surface.flatness = static_cast<float>(flatness);
+    surface.anisotropic = static_cast<float>(anisotropic);
+    surface.relativeIOR = static_cast<float>(relative_ior);
+    surface.specularTint = static_cast<float>(specular_tint);
+    surface.roughness = static_cast<float>(std::clamp(roughness, 0.001, 1.0));
+    surface.scatterDistance = static_cast<float>(scatter_distance);
+    surface.ior = static_cast<float>(ior);
+    return surface;
+}
+
+inline glm::vec3 DisneyMaterial::sample_direction(
+    const hit_record& rec,
+    const vec3& view_dir
+) const {
+    bsdf::SurfaceParameters surface = make_surface(rec, view_dir);
+    glm::vec3 view = to_glm(view_dir);
+
+    float pSpecular, pDiffuse, pClearcoat, pSpecTrans;
+    bsdf::CalculateLobePdfs(surface, pSpecular, pDiffuse, pClearcoat, pSpecTrans);
+
+    const float picks[4] = {pSpecular, pDiffuse, pClearcoat, pSpecTrans};
+    const auto sample_lobe = [&](int index, bsdf::BsdfSample& sample) -> bool {
+        switch (index) {
+            case 0: return bsdf::SampleDisneySpecular(surface, view, sample);
+            case 1: return bsdf::SampleDisneyDiffuse(surface, view, thin, sample);
+            case 2: return bsdf::SampleDisneyClearcoat(surface, view, sample);
+            case 3: return bsdf::SampleDisneySpecTransmission(surface, view, thin, sample);
+            default: return false;
+        }
+    };
+
+    float xi = utils::sampler::random_double();
+    float cumulative = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        cumulative += picks[i];
+        if (picks[i] <= 0.0f)
+            continue;
+        if (xi <= cumulative) {
+            bsdf::BsdfSample sample;
+            if (sample_lobe(i, sample))
+                return sample.wi;
+            break;
+        }
+    }
+
+    // Fallback: attempt lobes in priority order
+    for (int i = 0; i < 4; ++i) {
+        if (picks[i] <= 0.0f)
+            continue;
+        bsdf::BsdfSample sample;
+        if (sample_lobe(i, sample))
+            return sample.wi;
+    }
+
+    // Final fallback: cosine hemisphere
+    float r0 = utils::sampler::random_double();
+    float r1 = utils::sampler::random_double();
+    glm::vec3 local = bsdf::SampleCosineWeightedHemisphere(r0, r1);
+    return glm::normalize(surface.basis.transform * local);
+}
+
+inline double DisneyMaterial::pdf_value(
+    const hit_record& rec,
+    const vec3& view_dir,
+    const vec3& sample_dir
+) const {
+    bsdf::SurfaceParameters surface = make_surface(rec, view_dir);
+    float forwardPdf = 0.0f;
+    float reversePdf = 0.0f;
+    bsdf::EvaluateDisney(surface, to_glm(view_dir), to_glm(sample_dir), thin, forwardPdf, reversePdf);
+    return static_cast<double>(forwardPdf);
+}
 
 #endif

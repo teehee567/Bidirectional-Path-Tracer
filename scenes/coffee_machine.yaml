@@ -7,24 +7,39 @@ camera:
 
 materials:
   Plastic_Orange:
-    type: lambertian
-    color: [255, 97, 3]
+    type: disney
+    # Orange color [255, 97, 3] normalized
+    base_color: [1.0, 0.38, 0.012]  # Orange color normalized
+    metallic: 0.0
+    roughness: 0.7
+    ior: 1.5
+    relative_ior: 1.5
   Plastic_Black:
-    type: lambertian
-    color: [0, 0, 0]
+    type: disney
+    base_color: [0.02, 0.02, 0.02]  # Very dark base color for black plastic
+    metallic: 0.0
+    roughness: 0.65
+    ior: 1.5
+    relative_ior: 1.5
   Glass:
     type: dielectric
     ior: 1.5
+    spec_trans: 1.0
   Metal:
-    type: metal
-    color: [170, 170, 170]
+    type: disney
+    base_color: [0.6, 0.6, 0.6]  # Metal reflection color
+    metallic: 1.0
     roughness: 0.1
   Floor:
-    type: lambertian
-    color: [147, 147, 147]
+    type: disney
+    base_color: [0.5, 0.5, 0.5]  # Neutral gray floor
+    metallic: 0.0
+    roughness: 0.75
+    ior: 1.5
+    relative_ior: 1.5
   Light:
     type: light
-    emission: [245, 245, 245]
+    emission: [14, 14, 14]  # Balanced light intensity
 surfaces:
   - type: "object"
     smooth: true

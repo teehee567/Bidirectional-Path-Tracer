@@ -6,12 +6,19 @@
     #pragma warning (push, 0)
 #endif
 
-#define STB_IMAGE_IMPLEMENTATION
+#ifndef STBI_FAILURE_USERMSG
 #define STBI_FAILURE_USERMSG
+#endif
 #include "external/stb_image.h"
 
 #include <cstdlib>
 #include <iostream>
+
+// STBI_FREE is only defined when STB_IMAGE_IMPLEMENTATION is set
+// If not defined, stb_image uses free() by default
+#ifndef STBI_FREE
+#define STBI_FREE(p) std::free(p)
+#endif
 
 class rtw_image {
   public:

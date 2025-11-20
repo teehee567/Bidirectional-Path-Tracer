@@ -6,23 +6,32 @@
 #include "material.h"
 #include "triangle.h"
 #include "scene_loader.h"
-#include "texture.h"
-#include "constant_medium.h"
-#include "bxdf_material.h"
-#include "bxdfs/lambertian_bxdf.h"
-#include "bxdfs/specular_bxdf.h"
+#include "renderers/bidirectional_path_tracer.h"
 
 #include <iostream>
 
 void cornell_box() {
     triangle_collection world;
 
-    auto red   = make_shared<lambertian>(color(.65, .05, .05));
-    // Use BxDF material for white surfaces to demonstrate implementation
-    auto white_bxdf = make_shared<LambertianBxDF>(color(.73, .73, .73));
-    auto white = make_shared<BxDFMaterial>(white_bxdf);
-    auto green = make_shared<lambertian>(color(.12, .45, .15));
-    auto light = make_shared<diffuse_light>(color(15, 15, 15));
+    auto make_diffuse = [](const color& albedo) {
+        DisneyMaterialParams params;
+        params.base_color = albedo;
+        params.metallic = 0.0;
+        params.roughness = 1.0;
+        return make_shared<DisneyMaterial>(params);
+    };
+
+    auto make_light = [](const color& emission) {
+        DisneyMaterialParams params;
+        params.base_color = color(0,0,0);
+        params.emission = emission;
+        return make_shared<DisneyMaterial>(params);
+    };
+
+    auto red   = make_diffuse(color(.65, .05, .05));
+    auto white = make_diffuse(color(.73, .73, .73));
+    auto green = make_diffuse(color(.12, .45, .15));
+    auto light = make_light(color(15, 15, 15));
 
     // Cornell box sides
     add_quad_triangles(world, point3(555,0,0), vec3(0,0,555), vec3(0,555,0), green);
@@ -60,17 +69,19 @@ void cornell_box() {
     cam.progress_bar_length = 30;
     cam.file_name = "cornell_box.png";
 
-    auto world_bvh = make_shared<bvh_node>(world.to_hittable_list());
-    cam.render(*world_bvh, lights);
+    auto world_bvh = make_shared<bvh_node>(world);
+    BidirectionalPathTracer renderer(cam, *world_bvh, lights);
+    renderer.render();
 }
 
 int main(int argc, char** argv) {
     try {
         if (argc > 1) {
             auto scene = load_scene_from_yaml(argv[1]);
-            auto world_bvh = make_shared<bvh_node>(scene.world.to_hittable_list());
+            auto world_bvh = make_shared<bvh_node>(scene.world);
             const triangle_collection& lights = scene.lights.empty() ? scene.world : scene.lights;
-            scene.cam.render(*world_bvh, lights);
+            BidirectionalPathTracer renderer(scene.cam, *world_bvh, lights);
+            renderer.render();
         } else {
             cornell_box();
         }

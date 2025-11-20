@@ -2,6 +2,7 @@
   "name": "raytracer",
   "version-string": "0.1.0",
   "dependencies": [
+    "glm",
     "libpng",
     "yaml-cpp",
     "zlib"
