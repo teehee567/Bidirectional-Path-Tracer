@@ -8,6 +8,9 @@
 #include "scene_loader.h"
 #include "texture.h"
 #include "constant_medium.h"
+#include "bxdf_material.h"
+#include "bxdfs/lambertian_bxdf.h"
+#include "bxdfs/specular_bxdf.h"
 
 #include <iostream>
 
@@ -15,7 +18,9 @@ void cornell_box() {
     triangle_collection world;
 
     auto red   = make_shared<lambertian>(color(.65, .05, .05));
-    auto white = make_shared<lambertian>(color(.73, .73, .73));
+    // Use BxDF material for white surfaces to demonstrate implementation
+    auto white_bxdf = make_shared<LambertianBxDF>(color(.73, .73, .73));
+    auto white = make_shared<BxDFMaterial>(white_bxdf);
     auto green = make_shared<lambertian>(color(.12, .45, .15));
     auto light = make_shared<diffuse_light>(color(15, 15, 15));
 

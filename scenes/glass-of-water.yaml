@@ -1,5 +1,5 @@
 camera:
-  resolution: [1280, 720]
+  resolution: [200, 200]
   fov: 35
   aperture_radius: 0
   # From Tungsten camera.transform
@@ -11,33 +11,38 @@ camera:
 
 materials:
   Backdrop:
-    type: metal
+    type: ggx
     # 0.578596 * 255 ≈ 147
-    color: [147, 147, 147]
+    # Using F0 for metal (high reflectance)
+    f0: [147, 147, 147]
     roughness: 0.1
 
   Floor:
-    type: metal
-    color: [147, 147, 147]
+    type: ggx
+    f0: [147, 147, 147]
     roughness: 0.1
 
   WaterAir:
-    type: dielectric
+    type: biggx
     ior: 1.33
+    roughness: 0.001  # Very smooth water surface
 
   IceAir:
-    type: dielectric
+    type: biggx
     ior: 1.31
+    roughness: 0.005  # Slightly rough ice surface
 
   Glass:
-    type: dielectric
+    type: biggx
     ior: 1.5
+    roughness: 0.001  # Very smooth glass
 
   AirIce:
-    type: dielectric
-    # In Tungsten this is 0.763 (ratio of indices); you can change
-    # this to 1.0 if your dielectric expects an absolute IOR.
-    ior: 0.763
+    type: biggx
+    # Original had ior: 0.763 which is 1/1.31 (air/ice ratio)
+    # For BiGGX, we use the absolute IOR of ice
+    ior: 1.31
+    roughness: 0.005  # Slightly rough ice surface
 
   Light:
     type: light

@@ -1,0 +1,60 @@
+camera:
+  resolution: [2560, 1920]
+  fov: 30  # Approximating from the provided camera setup
+  aperture_radius: 0.002
+  location: [-0.3, -0.4, 0.3]
+  look_at: [0.8, 0, 0]
+  up: [0, 0.6, -0.244948974]  # Normalized direction vector
+  samples_per_pixel: 100
+  max_depth: 50
+  background: [245, 251, 253]
+  output: "results/caustics.png"
+
+materials:
+  # Glass material for the model
+  Glass:
+    type: dielectric
+    ior: 1.5
+  
+  # Wood floor - simplified since textures aren't supported yet
+  WoodFloor:
+    type: lambertian
+    color: [139, 90, 43]  # Wood-like brown color
+  
+  # Spotlight - using high emission for bright spot light effect
+  SpotLight:
+    type: light
+    emission: [150, 150, 150]
+
+surfaces:
+  # Glass model - adjust path as needed
+  - type: "object"
+    smooth: true
+    file: "models/glass_0.obj"
+    material: "Glass"
+  
+  # Spotlight disc - approximated as small quad mesh
+  # Original: disc at position (10, 19, -11) with normal (-1, -2, 1).norm() and radius 1
+  # Creating a small quad perpendicular to the light direction
+  - type: "mesh"
+    vertices: [
+      [9.0, 18.0, -10.0],
+      [11.0, 18.0, -10.0],
+      [11.0, 20.0, -12.0],
+      [9.0, 20.0, -12.0]
+    ]
+    triangles: [[0, 1, 2], [0, 2, 3]]
+    material: "SpotLight"
+  
+  # Floor plane
+  # Original: flat quad from (-20, -1, -20) to (20, -1, 20)
+  - type: "mesh"
+    vertices: [
+      [-20, -1, -20],
+      [-20, -1, 20],
+      [20, -1, 20],
+      [20, -1, -20]
+    ]
+    triangles: [[0, 1, 2], [0, 2, 3]]
+    material: "WoodFloor"
+

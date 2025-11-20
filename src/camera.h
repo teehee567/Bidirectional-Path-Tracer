@@ -25,7 +25,7 @@ class camera {
   public:
     double aspect_ratio = 1.0;  // Ratio of image width over height
     int    image_width  = 100;  // Rendered image width in pixel count
-    int    samples_per_pixel = 50;   // Count of random samples for each pixel
+    int    samples_per_pixel = 4;   // Count of random samples for each pixel
     int    max_depth         = 10;   // Maximum number of ray bounces into scene
     color  background;               // Scene background color
 
@@ -240,6 +240,8 @@ class camera {
         color emission;
         bool delta = false;
         bool is_light = false;
+        double pdf_fwd = 0.0; // pdf of sampling next direction (solid angle)
+        double pdf_rev = 0.0; // pdf of sampling previous direction (solid angle)
     };
 
     color ray_color(const ray& r, int depth, const hittable& world, const hittable& lights)
@@ -282,11 +284,11 @@ class camera {
         if (pdf_value <= 0)
             return color_from_emission;
 
-        double scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
-
         color sample_color = path_trace_color(scattered, depth-1, world, lights);
-        color color_from_scatter =
-            (srec.attenuation * scattering_pdf * sample_color) / pdf_value;
+        color f = rec.mat->evaluate_bsdf(rec, unit_vector(-r.direction()), unit_vector(scattered.direction()));
+        double cos_theta = std::max(0.0, dot(rec.normal, unit_vector(scattered.direction())));
+        
+        color color_from_scatter = (f * cos_theta * sample_color) / pdf_value;
 
         return color_from_emission + color_from_scatter;
     }
@@ -300,7 +302,8 @@ class camera {
         std::vector<path_vertex> camera_path;
         camera_path.reserve(depth);
         color background_contrib(0,0,0);
-        trace_path(r, depth, world, camera_path, color(1,1,1), &background_contrib);
+        camera_path.clear();
+        trace_subpath(r, depth, world, camera_path, color(1,1,1), &background_contrib);
 
         color result = background_contrib;
         for (const auto& vertex : camera_path) {
@@ -313,16 +316,16 @@ class camera {
         if (!build_light_path(world, light_collection, depth, light_path))
             return result;
 
-        for (const auto& cam_vertex : camera_path) {
-            for (const auto& light_vertex : light_path) {
-                result += connect_vertices(cam_vertex, light_vertex, world);
+        for (int s = 1; s <= static_cast<int>(camera_path.size()); ++s) {
+            for (int t = 1; t <= static_cast<int>(light_path.size()); ++t) {
+                result += connect_subpaths(camera_path, light_path, s, t, world);
             }
         }
 
         return result;
     }
 
-    void trace_path(
+    void trace_subpath(
         ray current,
         int depth,
         const hittable& world,
@@ -363,8 +366,14 @@ class camera {
             if (pdf_value <= 0)
                 break;
 
-            double scattering_pdf = rec.mat->scattering_pdf(current, rec, scattered);
-            throughput = throughput * srec.attenuation * scattering_pdf / pdf_value;
+            color f = rec.mat->evaluate_bsdf(rec, unit_vector(-current.direction()),
+                                             unit_vector(scattered.direction()));
+            double cos_theta = std::max(0.0, dot(rec.normal, unit_vector(scattered.direction())));
+            throughput = throughput * (f * (cos_theta / pdf_value));
+            path.back().pdf_fwd = pdf_value;
+            path.back().pdf_rev = rec.mat->scattering_pdf(
+                scattered, rec, ray(rec.p, -current.direction(), current.time())
+            );
             current = scattered;
         }
     }
@@ -375,6 +384,7 @@ class camera {
         int depth,
         std::vector<path_vertex>& path
     ) const {
+        path.clear();
         if (depth <= 0 || light_collection.empty())
             return false;
 
@@ -402,6 +412,8 @@ class camera {
         emitter_vertex.emission = emission;
         emitter_vertex.delta = false;
         emitter_vertex.is_light = true;
+        emitter_vertex.pdf_fwd = 0.0;
+        emitter_vertex.pdf_rev = 0.0;
         path.push_back(emitter_vertex);
 
         vec3 dir = sample_cosine_hemisphere(light_rec.normal);
@@ -411,9 +423,10 @@ class camera {
             return true;
 
         double pdf_dir = std::max(cos_theta / pi, 1e-8);
+        path.back().pdf_fwd = pdf_dir;
         color throughput = emitter_vertex.throughput * emission * (cos_theta / pdf_dir);
         ray light_ray(light_rec.p + (0.001 * light_rec.normal), dir_unit, 0.0);
-        trace_path(light_ray, depth - 1, world, path, throughput, nullptr);
+        trace_subpath(light_ray, depth - 1, world, path, throughput, nullptr);
         return true;
     }
 
@@ -435,6 +448,24 @@ class camera {
         if (max_t <= 0)
             return false;
         return !world.hit(shadow_ray, interval(0.001, max_t), tmp);
+    }
+
+    color connect_subpaths(
+        const std::vector<path_vertex>& camera_path,
+        const std::vector<path_vertex>& light_path,
+        int s,
+        int t,
+        const hittable& world
+    ) const {
+        if (s <= 0 || t <= 0)
+            return color(0,0,0);
+        if (s > static_cast<int>(camera_path.size()) || t > static_cast<int>(light_path.size()))
+            return color(0,0,0);
+
+        const path_vertex& cam_v = camera_path[s - 1];
+        const path_vertex& light_v = light_path[t - 1];
+
+        return connect_vertices(cam_v, light_v, world);
     }
 
     color connect_vertices(const path_vertex& cam_v, const path_vertex& light_v, const hittable& world) const {

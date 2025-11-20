@@ -4,6 +4,7 @@
 #include "main.h"
 #include "camera.h"
 #include "triangle.h"
+#include "bxdf_material.h"
 
 #include <yaml-cpp/yaml.h>
 
@@ -109,6 +110,14 @@ inline std::shared_ptr<material> build_material(const YAML::Node& node) {
     // - metal: color/albedo, roughness
     // - dielectric: ior
     // - light/diffuse_light: emission/color
+    // NEW BXDF TYPES:
+    // - lambertian_bxdf: albedo
+    // - specular_reflection: reflectance
+    // - specular_transmission: transmittance, eta_a, eta_b
+    // - ggx: ior, roughness
+    // - biggx: ior, roughness
+    // - mtl_ggx: diffuse, specular, roughness, ior, dissolve
+    // - mtl_ext_ggx: base_color, metallic, roughness, ior, dissolve
     const std::string type_str = node_to_string(node["type"], "");
     if (!type_str.empty()) {
         // Normalize expected keys across synonyms
@@ -119,7 +128,66 @@ inline std::shared_ptr<material> build_material(const YAML::Node& node) {
                     read_color_node_scaled(node["base_colour"], default_color)))
         );
 
-        if (type_str == "light" || type_str == "diffuse_light") {
+        // NEW BXDF MATERIAL TYPES
+        if (type_str == "lambertian_bxdf") {
+            auto bxdf = std::make_shared<LambertianBxDF>(color_value);
+            return std::make_shared<BxDFMaterial>(bxdf);
+        } else if (type_str == "specular_reflection") {
+            auto bxdf = std::make_shared<SpecularReflectionBxDF>(color_value);
+            return std::make_shared<BxDFMaterial>(bxdf);
+        } else if (type_str == "specular_transmission") {
+            double eta_a = node_to_double(node["eta_a"], 1.0);
+            double eta_b = node_to_double(node["eta_b"], 1.5);
+            // Also accept 'ior' as eta_b for convenience
+            if (node["ior"]) {
+                eta_b = node_to_double(node["ior"], 1.5);
+            }
+            auto bxdf = std::make_shared<SpecularTransmissionBxDF>(color_value, eta_a, eta_b);
+            return std::make_shared<BxDFMaterial>(bxdf);
+        } else if (type_str == "biggx") {
+            double ior = node_to_double(node["ior"], 1.5);
+            double roughness = std::clamp(node_to_double(node["roughness"], 0.1), 1e-4, 1.0);
+            auto bxdf = std::make_shared<BiGGX>(ior, roughness);
+            return std::make_shared<BxDFMaterial>(bxdf);
+        } else if (type_str == "ggx") {
+            // GGX takes F0 (Fresnel reflectance at normal incidence) and roughness
+            color f0 = read_color_node_scaled(node["f0"], color_value);
+            if (f0.length_squared() == 0.0) {
+                // If no F0 specified, use color/albedo as F0
+                f0 = color_value.length_squared() > 0 ? color_value : color(0.04, 0.04, 0.04);
+            }
+            double roughness = std::clamp(node_to_double(node["roughness"], 0.1), 1e-4, 1.0);
+            auto bxdf = std::make_shared<GGX>(f0, roughness);
+            return std::make_shared<BxDFMaterial>(bxdf);
+        } else if (type_str == "mtl_ggx") {
+            auto diffuse_tex = std::make_shared<solid_color>(
+                read_color_node_scaled(node["diffuse"], color_value)
+            );
+            auto specular_tex = std::make_shared<solid_color>(
+                read_color_node_scaled(node["specular"], color(1,1,1))
+            );
+            double roughness = std::clamp(node_to_double(node["roughness"], 0.1), 1e-4, 1.0);
+            double ior = node_to_double(node["ior"], 1.5);
+            double dissolve = std::clamp(node_to_double(node["dissolve"], 1.0), 0.0, 1.0);
+            auto bxdf = std::make_shared<MtlGGX>(diffuse_tex, specular_tex, roughness, ior, dissolve);
+            return std::make_shared<BxDFMaterial>(bxdf);
+        } else if (type_str == "mtl_ext_ggx") {
+            auto base_color_tex = std::make_shared<solid_color>(color_value);
+            double metallic_val = node_to_double(node["metallic"], 0.0);
+            auto metallic_tex = std::make_shared<solid_color>(
+                color(metallic_val, metallic_val, metallic_val)
+            );
+            double roughness_val = std::clamp(node_to_double(node["roughness"], 0.1), 1e-4, 1.0);
+            auto roughness_tex = std::make_shared<solid_color>(
+                color(roughness_val, roughness_val, roughness_val)
+            );
+            double ior = node_to_double(node["ior"], 1.5);
+            double dissolve = std::clamp(node_to_double(node["dissolve"], 1.0), 0.0, 1.0);
+            auto bxdf = std::make_shared<MtlExtGGX>(base_color_tex, metallic_tex, roughness_tex, ior, dissolve);
+            return std::make_shared<BxDFMaterial>(bxdf);
+        }
+        // OLD MATERIAL TYPES (for backward compatibility)
+        else if (type_str == "light" || type_str == "diffuse_light") {
             // For lights, treat emission as linear HDR. No 0–255 scaling.
             color emission = read_color_node(node["emission"], default_color);
             return std::make_shared<diffuse_light>(emission);
