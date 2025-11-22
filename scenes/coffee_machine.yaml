@@ -27,7 +27,7 @@ materials:
     type: disney
     base_color: [1.0, 1.0, 1.0]  # White glass
     metallic: 0.0
-    spec_trans: 1.0  # Full specular transmission for clear glass
+    spec_trans: 0.8  # Full specular transmission for clear glass
     roughness: 0.0  # Clear glass - no roughness
     ior: 1.5
     relative_ior: 1.5

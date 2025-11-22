@@ -427,7 +427,31 @@ namespace bsdf {
         glm::vec3 wo = glm::normalize(glm::transpose(surface.basis.transform) * v);
         glm::vec3 wi = glm::normalize(glm::transpose(surface.basis.transform) * l);
 
-        glm::vec3 wm = glm::normalize(wo + wi);
+        // Use the appropriate half-vector for reflection vs. transmission.
+        // For transmission events the microfacet normal differs and needs to
+        // incorporate the relative IOR (Burley 2015, Eq. 17). Using the
+        // reflection half-vector (wo + wi) for refraction collapses the
+        // contribution and results in black glass.
+        glm::vec3 wm;
+        const bool sameHemisphere = CosTheta(wo) * CosTheta(wi) > 0.0f;
+        if (sameHemisphere) {
+            wm = glm::normalize(wo + wi);
+        } else {
+            // Refractive half-vector
+            wm = glm::normalize(wo + wi * surface.relativeIOR);
+        }
+
+        // Keep the microfacet normal oriented with the outgoing direction so
+        // the masking-shadowing terms remain valid for transmission.
+        if (glm::dot(wo, wm) < 0.0f) {
+            wm = -wm;
+        }
+
+        if (glm::dot(wm, wm) == 0.0f) {
+            forwardPdf = 0.0f;
+            reversePdf = 0.0f;
+            return glm::vec3(0.0f);
+        }
 
         float dotNV = CosTheta(wo);
         float dotNL = CosTheta(wi);

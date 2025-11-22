@@ -1,8 +1,8 @@
 #ifndef SCENE_LOADER_H
 #define SCENE_LOADER_H
 
-#include "main.h"
 #include "camera.h"
+#include "main.h"
 #include "material.h"
 #include "triangle.h"
 
@@ -10,522 +10,635 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <stdexcept>
 #include <string>
-#include <vector>
 #include <unordered_map>
-#include <fstream>
-#include <sstream>
-#include <filesystem>
+#include <vector>
 
-struct scene_load_result {
+struct scene_load_result
+{
     camera cam;
     triangle_collection world;
     triangle_collection lights;
 };
 
-scene_load_result load_scene_from_yaml(const std::string& path);
+scene_load_result load_scene_from_yaml(const std::string &path);
 
-namespace scene_loader_detail {
+namespace scene_loader_detail
+{
 
-inline std::string node_to_string(const YAML::Node& node, const std::string& def = {}) {
-    if (!node || !node.IsScalar())
-        return def;
-    try {
-        return node.as<std::string>();
-    } catch (...) {
-        return def;
-    }
-}
+    // -----------------------------------------------------------------------------
+    // Small YAML helpers
+    // -----------------------------------------------------------------------------
 
-inline double node_to_double(const YAML::Node& node, double def = 0.0) {
-    if (!node || !node.IsScalar())
-        return def;
-    try {
-        return node.as<double>();
-    } catch (...) {
-        return def;
-    }
-}
-
-inline int node_to_int(const YAML::Node& node, int def = 0) {
-    if (!node || !node.IsScalar())
-        return def;
-    try {
-        return node.as<int>();
-    } catch (...) {
-        return def;
-    }
-}
-
-inline std::vector<double> node_to_double_list(const YAML::Node& node) {
-    std::vector<double> values;
-    if (!node || !node.IsSequence())
-        return values;
-    values.reserve(node.size());
-    for (const auto& element : node) {
-        values.push_back(node_to_double(element, 0.0));
-    }
-    return values;
-}
-
-inline bool node_to_bool(const YAML::Node& node, bool def = false) {
-    if (!node)
-        return def;
-    try {
-        return node.as<bool>();
-    } catch (...) {
-        return def;
-    }
-}
-
-inline color read_color_node(const YAML::Node& node, const color& fallback) {
-    auto values = node_to_double_list(node);
-    if (values.size() < 3)
-        return fallback;
-    return color(values[0], values[1], values[2]);
-}
-
-// Reads a color, allowing 0-1, 0-255 ranges. If any component > 1 and <= 255, scales by 1/255.
-inline color read_color_node_scaled(const YAML::Node& node, const color& fallback) {
-    auto values = node_to_double_list(node);
-    if (values.size() < 3)
-        return fallback;
-    double r = values[0], g = values[1], b = values[2];
-    double maxc = std::max({std::fabs(r), std::fabs(g), std::fabs(b)});
-    if (maxc > 1.0 && maxc <= 255.0) {
-        const double s = 1.0 / 255.0;
-        r *= s; g *= s; b *= s;
-    }
-    return color(r, g, b);
-}
-
-inline vec3 read_vec3_node(const YAML::Node& node, const vec3& fallback) {
-    auto values = node_to_double_list(node);
-    if (values.size() < 3)
-        return fallback;
-    return vec3(values[0], values[1], values[2]);
-}
-
-inline std::shared_ptr<material> build_material(const YAML::Node& node) {
-    if (!node || !node.IsMap())
-        throw std::runtime_error("Material must be a mapping");
-
-    const color default_color(0.8, 0.8, 0.8);
-    DisneyMaterialParams params;
-
-    params.base_color = read_color_node_scaled(node["base_color"], default_color);
-    params.base_color = read_color_node_scaled(node["base_colour"], params.base_color);
-    params.base_color = read_color_node_scaled(node["albedo"], params.base_color);
-    params.base_color = read_color_node_scaled(node["color"], params.base_color);
-
-    params.emission = read_color_node(node["emission"], params.emission);
-    params.transmittance_color = read_color_node_scaled(
-        node["transmittance_color"],
-        params.transmittance_color
-    );
-
-    params.metallic = node_to_double(node["metallic"], params.metallic);
-    params.roughness = node_to_double(node["roughness"], params.roughness);
-    params.specular_tint = node_to_double(node["specular_tint"], params.specular_tint);
-    params.sheen = node_to_double(node["sheen"], params.sheen);
-    params.sheen_tint = node_to_double(node["sheen_tint"], params.sheen_tint);
-    params.clearcoat = node_to_double(node["clearcoat"], params.clearcoat);
-    params.clearcoat_gloss = node_to_double(node["clearcoat_gloss"], params.clearcoat_gloss);
-    params.anisotropic = node_to_double(node["anisotropic"], params.anisotropic);
-    params.flatness = node_to_double(node["flatness"], params.flatness);
-    params.scatter_distance = node_to_double(node["scatter_distance"], params.scatter_distance);
-    params.relative_ior = node_to_double(node["relative_ior"], params.relative_ior);
-    params.ior = node_to_double(node["ior"], params.ior);
-    params.specular_transmission = node_to_double(node["spec_trans"], params.specular_transmission);
-    params.specular_transmission = node_to_double(node["transmission"], params.specular_transmission);
-    params.diffuse_transmission = node_to_double(node["diff_trans"], params.diffuse_transmission);
-    params.diffuse_transmission = node_to_double(node["diffuse_transmission"], params.diffuse_transmission);
-    params.thin = node_to_bool(node["thin"], params.thin);
-
-    const std::string type = node_to_string(node["type"], "disney");
-    if (type == "light" || type == "diffuse_light") {
-        params.emission = read_color_node(node["emission"], color(10.0, 10.0, 10.0));
-        params.base_color = color(0,0,0);
-        params.metallic = 0.0;
-        params.specular_transmission = 0.0;
-        params.diffuse_transmission = 0.0;
-    } else if (type == "lambertian" || type == "lambertian_bxdf") {
-        params.metallic = 0.0;
-        params.specular_transmission = 0.0;
-        params.diffuse_transmission = 0.0;
-        params.roughness = 1.0;
-    } else if (type == "metal" || type == "specular_reflection" || type == "ggx" || type == "biggx") {
-        params.metallic = 1.0;
-        params.specular_transmission = 0.0;
-        params.diffuse_transmission = 0.0;
-        params.roughness = node_to_double(node["roughness"], params.roughness);
-    } else if (type == "dielectric" || type == "glass" || type == "specular_transmission") {
-        params.metallic = 0.0;
-        params.specular_transmission = node_to_double(node["spec_trans"], 1.0);
-        params.diffuse_transmission = 0.0;
-        params.base_color = read_color_node_scaled(node["color"], color(1,1,1));
-        params.ior = node_to_double(node["ior"], params.ior);
-        params.relative_ior = params.ior;
-        params.roughness = std::clamp(node_to_double(node["roughness"], 0.0), 0.0, 1.0);
-    }
-
-    return std::make_shared<DisneyMaterial>(params);
-}
-
-// Build materials map from a YAML mapping of name -> material_def
-inline std::unordered_map<std::string, std::shared_ptr<material>> load_materials(const YAML::Node& materials_node) {
-    std::unordered_map<std::string, std::shared_ptr<material>> materials;
-    if (!materials_node || !materials_node.IsMap())
-        return materials;
-
-    for (auto it = materials_node.begin(); it != materials_node.end(); ++it) {
-        const std::string name = it->first.as<std::string>();
-        const YAML::Node def = it->second;
-        try {
-            materials[name] = build_material(def);
-        } catch (...) {
-            // Skip invalid material entries
-        }
-    }
-    return materials;
-}
-
-inline void add_triangle_with_lights(
-    triangle_collection& world,
-    triangle_collection& lights,
-    const point3& v0,
-    const point3& v1,
-    const point3& v2,
-    const std::shared_ptr<material>& mat
-) {
-    triangle tri(v0, v1, v2, mat);
-    world.add(tri);
-    if (mat && mat->is_emissive())
-        lights.add(tri);
-}
-
-inline point3 sphere_point(double theta, double phi, const point3& center, double radius) {
-    double sin_theta = std::sin(theta);
-    double x = radius * sin_theta * std::cos(phi);
-    double y = radius * std::cos(theta);
-    double z = radius * sin_theta * std::sin(phi);
-    return center + vec3(x, y, z);
-}
-
-inline void add_uv_sphere(
-    triangle_collection& world,
-    triangle_collection& lights,
-    const point3& center,
-    double radius,
-    const std::shared_ptr<material>& mat,
-    int lat_steps = 16,
-    int lon_steps = 32
-) {
-    const double pi = 3.14159265358979323846;
-
-    for (int lat = 0; lat < lat_steps; ++lat) {
-        double theta0 = pi * (static_cast<double>(lat) / lat_steps);
-        double theta1 = pi * (static_cast<double>(lat + 1) / lat_steps);
-
-        for (int lon = 0; lon < lon_steps; ++lon) {
-            double phi0 = 2.0 * pi * (static_cast<double>(lon) / lon_steps);
-            double phi1 = 2.0 * pi * (static_cast<double>(lon + 1) / lon_steps);
-
-            point3 p00 = sphere_point(theta0, phi0, center, radius);
-            point3 p01 = sphere_point(theta0, phi1, center, radius);
-            point3 p10 = sphere_point(theta1, phi0, center, radius);
-            point3 p11 = sphere_point(theta1, phi1, center, radius);
-
-            if (lat > 0)
-                add_triangle_with_lights(world, lights, p00, p10, p11, mat);
-            if (lat < lat_steps - 1)
-                add_triangle_with_lights(world, lights, p00, p11, p01, mat);
-        }
-    }
-}
-
-inline void load_tri_mesh(
-    const YAML::Node& mesh,
-    triangle_collection& world,
-    triangle_collection& lights
-) {
-    const YAML::Node data = mesh["data"];
-    if (!data || !data.IsMap())
-        throw std::runtime_error("Mesh missing data field");
-
-    const YAML::Node vertices_node = data["vertices"];
-    if (!vertices_node || !vertices_node.IsSequence())
-        throw std::runtime_error("Missing vertices");
-
-    std::vector<double> vertices = node_to_double_list(vertices_node);
-    if (vertices.size() % 9 != 0)
-        throw std::runtime_error("Vertices length not a multiple of 9");
-
-    const YAML::Node material_node = mesh["material"];
-    if (!material_node)
-        throw std::runtime_error("Missing material field");
-    auto mat = build_material(material_node);
-
-    for (size_t i = 0; i < vertices.size(); i += 9) {
-        point3 v0(vertices[i + 0], vertices[i + 1], vertices[i + 2]);
-        point3 v1(vertices[i + 3], vertices[i + 4], vertices[i + 5]);
-        point3 v2(vertices[i + 6], vertices[i + 7], vertices[i + 8]);
-        add_triangle_with_lights(world, lights, v0, v1, v2, mat);
-    }
-}
-
-inline void load_sphere(
-    const YAML::Node& mesh,
-    triangle_collection& world,
-    triangle_collection& lights
-) {
-    const YAML::Node material_node = mesh["material"];
-    if (!material_node)
-        throw std::runtime_error("Missing material field");
-    auto mat = build_material(material_node);
-
-    const YAML::Node data = mesh["data"];
-    if (!data || !data.IsMap())
-        throw std::runtime_error("Missing data field");
-
-    vec3 center_vec = read_vec3_node(data["center"], vec3(0, 0, 0));
-    double radius = node_to_double(data["radius"], 0.0);
-    if (radius <= 0.0)
-        throw std::runtime_error("Missing or invalid radius field");
-
-    add_uv_sphere(world, lights, point3(center_vec), radius, mat);
-}
-
-// Load indexed mesh: vertices: [[x,y,z], ...], triangles: [[i,j,k], ...], material: "Name"
-inline void load_indexed_mesh(
-    const YAML::Node& mesh,
-    triangle_collection& world,
-    triangle_collection& lights,
-    const std::unordered_map<std::string, std::shared_ptr<material>>& materials
-) {
-    const YAML::Node verts_node = mesh["vertices"];
-    const YAML::Node tris_node  = mesh["triangles"];
-    if (!verts_node || !verts_node.IsSequence())
-        throw std::runtime_error("Indexed mesh missing vertices");
-    if (!tris_node || !tris_node.IsSequence())
-        throw std::runtime_error("Indexed mesh missing triangles");
-
-    std::vector<point3> verts;
-    verts.reserve(verts_node.size());
-    for (const auto& v : verts_node) {
-        auto vals = node_to_double_list(v);
-        if (vals.size() < 3) continue;
-        verts.emplace_back(vals[0], vals[1], vals[2]);
-    }
-
-    std::shared_ptr<material> mat;
-    const YAML::Node mat_node = mesh["material"];
-    if (mat_node) {
-        if (mat_node.IsScalar()) {
-            const std::string mat_name = node_to_string(mat_node);
-            auto it = materials.find(mat_name);
-            if (it != materials.end()) mat = it->second;
-        } else if (mat_node.IsMap()) {
-            mat = build_material(mat_node);
-        }
-    }
-    if (!mat) mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
-
-    for (const auto& tri : tris_node) {
-        std::vector<int> idx;
-        if (tri.IsSequence()) {
-            for (const auto& t : tri) idx.push_back(node_to_int(t, 0));
-        }
-        if (idx.size() < 3) continue;
-        // Assume indices are 0-based in YAML (as provided). If they are 1-based, adjust here.
-        const point3& v0 = verts.at(static_cast<size_t>(idx[0]));
-        const point3& v1 = verts.at(static_cast<size_t>(idx[1]));
-        const point3& v2 = verts.at(static_cast<size_t>(idx[2]));
-        add_triangle_with_lights(world, lights, v0, v1, v2, mat);
-    }
-}
-
-// Very small OBJ loader: supports lines beginning with 'v' and 'f'.
-inline void load_obj_file(
-    const std::filesystem::path& obj_path,
-    const std::shared_ptr<material>& mat,
-    triangle_collection& world,
-    triangle_collection& lights
-) {
-    std::ifstream in(obj_path);
-    if (!in)
-        throw std::runtime_error("Failed to open OBJ file: " + obj_path.string());
-
-    std::vector<point3> verts;
-    verts.reserve(1024);
-
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.empty()) continue;
-        std::istringstream ss(line);
-        std::string tag;
-        ss >> tag;
-        if (tag == "v") {
-            double x, y, z;
-            if (ss >> x >> y >> z) {
-                verts.emplace_back(x, y, z);
+    inline std::string
+    as_string(const YAML::Node &node, const std::string &def = {})
+    {
+        if(!node || !node.IsScalar())
+            return def;
+        try
+            {
+                return node.as<std::string>();
             }
-        } else if (tag == "f") {
-            std::vector<int> fidx;
-            std::string tok;
-            while (ss >> tok) {
-                // token forms: vi | vi/vt | vi/vt/vn | vi//vn
-                size_t slash = tok.find('/');
-                std::string vi_str = (slash == std::string::npos) ? tok : tok.substr(0, slash);
-                try {
-                    int vi = std::stoi(vi_str);
-                    // OBJ indices are 1-based; handle negative indices too
-                    int idx = (vi > 0) ? (vi - 1) : (static_cast<int>(verts.size()) + vi);
-                    fidx.push_back(idx);
-                } catch (...) {
-                    // skip malformed
-                }
+        catch(...)
+            {
+                return def;
             }
-            if (fidx.size() >= 3) {
-                // fan triangulation
-                for (size_t k = 2; k < fidx.size(); ++k) {
-                    const point3& v0 = verts.at(static_cast<size_t>(fidx[0]));
-                    const point3& v1 = verts.at(static_cast<size_t>(fidx[k-1]));
-                    const point3& v2 = verts.at(static_cast<size_t>(fidx[k]));
-                    add_triangle_with_lights(world, lights, v0, v1, v2, mat);
-                }
+    }
+
+    inline double as_double(const YAML::Node &node, double def = 0.0)
+    {
+        if(!node || !node.IsScalar())
+            return def;
+        try
+            {
+                return node.as<double>();
             }
-        }
-    }
-}
-
-inline void load_object(
-    const YAML::Node& node,
-    const std::filesystem::path& yaml_dir,
-    triangle_collection& world,
-    triangle_collection& lights,
-    const std::unordered_map<std::string, std::shared_ptr<material>>& materials
-) {
-    const std::string file_rel = node_to_string(node["file"]);
-    if (file_rel.empty())
-        throw std::runtime_error("Object missing file field");
-    const std::filesystem::path obj_path = yaml_dir / file_rel;
-
-    std::shared_ptr<material> mat;
-    const YAML::Node mat_node = node["material"];
-    if (mat_node) {
-        if (mat_node.IsScalar()) {
-            const std::string mat_name = node_to_string(mat_node);
-            auto it = materials.find(mat_name);
-            if (it != materials.end()) mat = it->second;
-        } else if (mat_node.IsMap()) {
-            mat = build_material(mat_node);
-        }
-    }
-    if (!mat) mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
-
-    load_obj_file(obj_path, mat, world, lights);
-}
-
-inline void load_camera_from_yaml(const YAML::Node& node, camera& cam) {
-    if (!node || !node.IsMap())
-        throw std::runtime_error("Camera section must be a mapping");
-
-    const YAML::Node resolution_node = node["resolution"];
-    if (!resolution_node || !resolution_node.IsSequence() || resolution_node.size() < 2)
-        throw std::runtime_error("Camera missing resolution");
-
-    auto res_values = node_to_double_list(resolution_node);
-    if (res_values.size() < 2)
-        throw std::runtime_error("Camera missing resolution");
-
-    int width = static_cast<int>(res_values[0]);
-    int height = static_cast<int>(res_values[1]);
-    if (width <= 0 || height <= 0)
-        throw std::runtime_error("Resolution values must be positive");
-
-    cam.image_width = width;
-    cam.aspect_ratio = static_cast<double>(width) / static_cast<double>(height);
-
-    // Field of view parsing:
-    // Prefer explicit fov/vfov (in degrees). If absent, derive vfov from focal_length using
-    // a default 35mm stills camera vertical sensor size (24mm), adjusted for aspect ratio if provided.
-    double vfov_deg = cam.vfov;
-    const bool has_vfov = static_cast<bool>(node["vfov"]) || static_cast<bool>(node["fov"]);
-
-    if (has_vfov) {
-        vfov_deg = node_to_double(node["vfov"], node_to_double(node["fov"], vfov_deg));
+        catch(...)
+            {
+                return def;
+            }
     }
 
-    // Clamp to a sane range
-    vfov_deg = std::clamp(vfov_deg, 1.0, 179.0);
-    cam.vfov = vfov_deg;
+    inline int as_int(const YAML::Node &node, int def = 0)
+    {
+        if(!node || !node.IsScalar())
+            return def;
+        try
+            {
+                return node.as<int>();
+            }
+        catch(...)
+            {
+                return def;
+            }
+    }
 
-    cam.focus_dist = node_to_double(node["focus_distance"], cam.focus_dist);
-    // Disable defocus blur regardless of any aperture settings provided
-    cam.defocus_angle = 0.0;
+    inline bool as_bool(const YAML::Node &node, bool def = false)
+    {
+        if(!node)
+            return def;
+        try
+            {
+                return node.as<bool>();
+            }
+        catch(...)
+            {
+                return def;
+            }
+    }
 
-    cam.lookfrom = point3(read_vec3_node(node["location"], vec3(cam.lookfrom.x(), cam.lookfrom.y(), cam.lookfrom.z())));
-    cam.lookat   = point3(read_vec3_node(node["look_at"], vec3(cam.lookat.x(), cam.lookat.y(), cam.lookat.z())));
+    inline std::vector<double> as_double_list(const YAML::Node &node)
+    {
+        std::vector<double> v;
+        if(!node || !node.IsSequence())
+            return v;
+        v.reserve(node.size());
+        for(const auto &e : node)
+            v.push_back(as_double(e, 0.0));
+        return v;
+    }
 
-    cam.vup = read_vec3_node(node["up"], cam.vup);
-    cam.background = read_color_node(node["background"], cam.background);
+    inline vec3 as_vec3(const YAML::Node &node, const vec3 &def)
+    {
+        auto values = as_double_list(node);
+        if(values.size() < 3)
+            return def;
+        return vec3(values[0], values[1], values[2]);
+    }
 
-    cam.samples_per_pixel = node_to_int(node["samples_per_pixel"], cam.samples_per_pixel);
-    cam.max_depth = node_to_int(node["max_depth"], cam.max_depth);
-    std::string output = node_to_string(node["output"]);
-    if (!output.empty())
-        cam.file_name = output;
-}
+    inline color as_color_01(const YAML::Node &node, const color &def)
+    {
+        auto values = as_double_list(node);
+        if(values.size() < 3)
+            return def;
+        return color(values[0], values[1], values[2]);
+    }
+
+    // Reads a color, allowing either [0,1] or [0,255] ranges.
+    // If any absolute component is in (1, 255], we assume 0-255 and scale.
+    inline color as_color_scaled(const YAML::Node &node, const color &def)
+    {
+        auto values = as_double_list(node);
+        if(values.size() < 3)
+            return def;
+
+        double r = values[0], g = values[1], b = values[2];
+        double maxc = std::max({std::fabs(r), std::fabs(g), std::fabs(b)});
+
+        if(maxc > 1.0 && maxc <= 255.0)
+            {
+                const double s = 1.0 / 255.0;
+                r *= s;
+                g *= s;
+                b *= s;
+            }
+
+        return color(r, g, b);
+    }
+
+    // -----------------------------------------------------------------------------
+    // Materials
+    // -----------------------------------------------------------------------------
+
+    inline std::shared_ptr<material> build_material(const YAML::Node &node)
+    {
+        if(!node || !node.IsMap())
+            throw std::runtime_error("Material must be a mapping");
+
+        DisneyMaterialParams p;
+
+        // Base color: accept a few synonyms, scaled to [0,1] when needed.
+        color base = as_color_scaled(node["base_color"], color(0.8, 0.8, 0.8));
+        base = as_color_scaled(node["base_colour"], base);
+        base = as_color_scaled(node["albedo"], base);
+        base = as_color_scaled(node["color"], base);
+        p.base_color = base;
+
+        p.emission = as_color_01(node["emission"], p.emission);
+        p.transmittance_color = as_color_scaled(node["transmittance_color"],
+                                                p.transmittance_color);
+
+        p.metallic = as_double(node["metallic"], p.metallic);
+        p.roughness = as_double(node["roughness"], p.roughness);
+        p.specular_tint = as_double(node["specular_tint"], p.specular_tint);
+        p.sheen = as_double(node["sheen"], p.sheen);
+        p.sheen_tint = as_double(node["sheen_tint"], p.sheen_tint);
+        p.clearcoat = as_double(node["clearcoat"], p.clearcoat);
+        p.clearcoat_gloss
+          = as_double(node["clearcoat_gloss"], p.clearcoat_gloss);
+        p.anisotropic = as_double(node["anisotropic"], p.anisotropic);
+        p.flatness = as_double(node["flatness"], p.flatness);
+        p.scatter_distance
+          = as_double(node["scatter_distance"], p.scatter_distance);
+        p.relative_ior = as_double(node["relative_ior"], p.relative_ior);
+        p.ior = as_double(node["ior"], p.ior);
+        p.specular_transmission
+          = as_double(node["spec_trans"], as_double(node["transmission"],
+                                                    p.specular_transmission));
+        p.diffuse_transmission = as_double(
+          node["diff_trans"],
+          as_double(node["diffuse_transmission"], p.diffuse_transmission));
+        p.thin = as_bool(node["thin"], p.thin);
+
+        const std::string type = as_string(node["type"], "disney");
+
+
+        return std::make_shared<DisneyMaterial>(p);
+    }
+
+    // name -> material definition
+    inline std::unordered_map<std::string, std::shared_ptr<material>>
+    load_materials(const YAML::Node &materials_node)
+    {
+        std::unordered_map<std::string, std::shared_ptr<material>> mats;
+        if(!materials_node || !materials_node.IsMap())
+            return mats;
+
+        for(auto it = materials_node.begin(); it != materials_node.end(); ++it)
+            {
+                const std::string name = as_string(it->first, "");
+                if(name.empty())
+                    continue;
+                try
+                    {
+                        mats[name] = build_material(it->second);
+                    }
+                catch(...)
+                    {
+                        // Skip invalid entries; keep going.
+                    }
+            }
+        return mats;
+    }
+
+    // -----------------------------------------------------------------------------
+    // Geometry helpers
+    // -----------------------------------------------------------------------------
+
+    inline void
+    add_triangle_with_lights(triangle_collection &world,
+                             triangle_collection &lights, const point3 &v0,
+                             const point3 &v1, const point3 &v2,
+                             const std::shared_ptr<material> &mat)
+    {
+        triangle tri(v0, v1, v2, mat);
+        world.add(tri);
+        if(mat && mat->is_emissive())
+            lights.add(tri);
+    }
+
+    inline point3
+    sphere_point(double theta, double phi, const point3 &center, double radius)
+    {
+        double sin_theta = std::sin(theta);
+        double x = radius * sin_theta * std::cos(phi);
+        double y = radius * std::cos(theta);
+        double z = radius * sin_theta * std::sin(phi);
+        return center + vec3(x, y, z);
+    }
+
+    // Simple UV-sphere tesselation
+    inline void
+    add_uv_sphere(triangle_collection &world, triangle_collection &lights,
+                  const point3 &center, double radius,
+                  const std::shared_ptr<material> &mat, int lat_steps = 16,
+                  int lon_steps = 32)
+    {
+        constexpr double pi = 3.14159265358979323846;
+
+        for(int lat = 0; lat < lat_steps; ++lat)
+            {
+                double theta0 = pi * (static_cast<double>(lat) / lat_steps);
+                double theta1
+                  = pi * (static_cast<double>(lat + 1) / lat_steps);
+
+                for(int lon = 0; lon < lon_steps; ++lon)
+                    {
+                        double phi0
+                          = 2.0 * pi * (static_cast<double>(lon) / lon_steps);
+                        double phi1
+                          = 2.0 * pi
+                            * (static_cast<double>(lon + 1) / lon_steps);
+
+                        point3 p00
+                          = sphere_point(theta0, phi0, center, radius);
+                        point3 p01
+                          = sphere_point(theta0, phi1, center, radius);
+                        point3 p10
+                          = sphere_point(theta1, phi0, center, radius);
+                        point3 p11
+                          = sphere_point(theta1, phi1, center, radius);
+
+                        if(lat > 0)
+                            add_triangle_with_lights(world, lights, p00, p10,
+                                                     p11, mat);
+                        if(lat < lat_steps - 1)
+                            add_triangle_with_lights(world, lights, p00, p11,
+                                                     p01, mat);
+                    }
+            }
+    }
+
+    // -----------------------------------------------------------------------------
+    // Mesh loaders
+    // -----------------------------------------------------------------------------
+
+    // "TriMesh": vertices is a flat list [x0,y0,z0, x1,y1,z1, ...] in groups
+    // of 9.
+    inline void
+    load_tri_mesh(const YAML::Node &mesh, triangle_collection &world,
+                  triangle_collection &lights)
+    {
+        const YAML::Node data = mesh["data"];
+        if(!data || !data.IsMap())
+            throw std::runtime_error("TriMesh missing data field");
+
+        auto vertices_node = data["vertices"];
+        if(!vertices_node || !vertices_node.IsSequence())
+            throw std::runtime_error("TriMesh missing vertices");
+
+        std::vector<double> vertices = as_double_list(vertices_node);
+        if(vertices.size() % 9 != 0)
+            throw std::runtime_error(
+              "TriMesh: vertices length must be multiple of 9");
+
+        auto mat = build_material(mesh["material"]);
+        if(!mat)
+            throw std::runtime_error("TriMesh missing or invalid material");
+
+        for(size_t i = 0; i < vertices.size(); i += 9)
+            {
+                point3 v0(vertices[i + 0], vertices[i + 1], vertices[i + 2]);
+                point3 v1(vertices[i + 3], vertices[i + 4], vertices[i + 5]);
+                point3 v2(vertices[i + 6], vertices[i + 7], vertices[i + 8]);
+                add_triangle_with_lights(world, lights, v0, v1, v2, mat);
+            }
+    }
+
+    // "Sphere": data.center, data.radius, and a material.
+    inline void load_sphere(const YAML::Node &mesh, triangle_collection &world,
+                            triangle_collection &lights)
+    {
+        auto mat = build_material(mesh["material"]);
+        if(!mat)
+            throw std::runtime_error("Sphere missing or invalid material");
+
+        const YAML::Node data = mesh["data"];
+        if(!data || !data.IsMap())
+            throw std::runtime_error("Sphere missing data field");
+
+        vec3 center_vec = as_vec3(data["center"], vec3(0, 0, 0));
+        double radius = as_double(data["radius"], 0.0);
+        if(radius <= 0.0)
+            throw std::runtime_error("Sphere missing or invalid radius");
+
+        add_uv_sphere(world, lights, point3(center_vec), radius, mat);
+    }
+
+    // "mesh": indexed triangles, plus material reference or inline definition.
+    inline void load_indexed_mesh(
+      const YAML::Node &mesh, triangle_collection &world,
+      triangle_collection &lights,
+      const std::unordered_map<std::string, std::shared_ptr<material>>
+        &materials)
+    {
+        const YAML::Node verts_node = mesh["vertices"];
+        const YAML::Node tris_node = mesh["triangles"];
+        if(!verts_node || !verts_node.IsSequence())
+            throw std::runtime_error("Indexed mesh missing vertices");
+        if(!tris_node || !tris_node.IsSequence())
+            throw std::runtime_error("Indexed mesh missing triangles");
+
+        std::vector<point3> verts;
+        verts.reserve(verts_node.size());
+        for(const auto &v : verts_node)
+            {
+                auto vals = as_double_list(v);
+                if(vals.size() < 3)
+                    continue;
+                verts.emplace_back(vals[0], vals[1], vals[2]);
+            }
+
+        std::shared_ptr<material> mat;
+        const YAML::Node mat_node = mesh["material"];
+        if(mat_node)
+            {
+                if(mat_node.IsScalar())
+                    {
+                        const std::string mat_name = as_string(mat_node);
+                        auto it = materials.find(mat_name);
+                        if(it != materials.end())
+                            mat = it->second;
+                    }
+                else if(mat_node.IsMap())
+                    {
+                        mat = build_material(mat_node);
+                    }
+            }
+        if(!mat)
+            mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
+
+        for(const auto &tri : tris_node)
+            {
+                if(!tri.IsSequence())
+                    continue;
+
+                std::vector<int> idx;
+                for(const auto &t : tri)
+                    idx.push_back(as_int(t, 0));
+                if(idx.size() < 3)
+                    continue;
+
+                const point3 &v0 = verts.at(static_cast<size_t>(idx[0]));
+                const point3 &v1 = verts.at(static_cast<size_t>(idx[1]));
+                const point3 &v2 = verts.at(static_cast<size_t>(idx[2]));
+                add_triangle_with_lights(world, lights, v0, v1, v2, mat);
+            }
+    }
+
+    // Very small OBJ loader: supports 'v' and 'f' lines.
+    inline void
+    load_obj_file(const std::filesystem::path &obj_path,
+                  const std::shared_ptr<material> &mat,
+                  triangle_collection &world, triangle_collection &lights)
+    {
+        std::ifstream in(obj_path);
+        if(!in)
+            throw std::runtime_error("Failed to open OBJ file: "
+                                     + obj_path.string());
+
+        std::vector<point3> verts;
+        verts.reserve(1024);
+
+        std::string line;
+        while(std::getline(in, line))
+            {
+                if(line.empty())
+                    continue;
+                std::istringstream ss(line);
+                std::string tag;
+                ss >> tag;
+
+                if(tag == "v")
+                    {
+                        double x, y, z;
+                        if(ss >> x >> y >> z)
+                            {
+                                verts.emplace_back(x, y, z);
+                            }
+                    }
+                else if(tag == "f")
+                    {
+                        std::vector<int> fidx;
+                        std::string tok;
+                        while(ss >> tok)
+                            {
+                                size_t slash = tok.find('/');
+                                std::string vi_str
+                                  = (slash == std::string::npos)
+                                      ? tok
+                                      : tok.substr(0, slash);
+                                try
+                                    {
+                                        int vi = std::stoi(vi_str);
+                                        int idx
+                                          = (vi > 0)
+                                              ? (vi - 1)
+                                              : (static_cast<int>(verts.size())
+                                                 + vi);
+                                        fidx.push_back(idx);
+                                    }
+                                catch(...)
+                                    {
+                                        // skip malformed token
+                                    }
+                            }
+
+                        if(fidx.size() >= 3)
+                            {
+                                // Fan triangulation
+                                for(size_t k = 2; k < fidx.size(); ++k)
+                                    {
+                                        const point3 &v0 = verts.at(
+                                          static_cast<size_t>(fidx[0]));
+                                        const point3 &v1 = verts.at(
+                                          static_cast<size_t>(fidx[k - 1]));
+                                        const point3 &v2 = verts.at(
+                                          static_cast<size_t>(fidx[k]));
+                                        add_triangle_with_lights(
+                                          world, lights, v0, v1, v2, mat);
+                                    }
+                            }
+                    }
+            }
+    }
+
+    // "object": loads an external OBJ, optional material by name or inline.
+    inline void
+    load_object(const YAML::Node &node, const std::filesystem::path &yaml_dir,
+                triangle_collection &world, triangle_collection &lights,
+                const std::unordered_map<std::string,
+                                         std::shared_ptr<material>> &materials)
+    {
+        const std::string file_rel = as_string(node["file"]);
+        if(file_rel.empty())
+            throw std::runtime_error("Object missing file field");
+
+        const std::filesystem::path obj_path = yaml_dir / file_rel;
+
+        std::shared_ptr<material> mat;
+        const YAML::Node mat_node = node["material"];
+        if(mat_node)
+            {
+                if(mat_node.IsScalar())
+                    {
+                        const std::string mat_name = as_string(mat_node);
+                        auto it = materials.find(mat_name);
+                        if(it != materials.end())
+                            mat = it->second;
+                    }
+                else if(mat_node.IsMap())
+                    {
+                        mat = build_material(mat_node);
+                    }
+            }
+        if(!mat)
+            mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
+
+        load_obj_file(obj_path, mat, world, lights);
+    }
+
+    // -----------------------------------------------------------------------------
+    // Camera
+    // -----------------------------------------------------------------------------
+
+    inline void load_camera_from_yaml(const YAML::Node &node, camera &cam)
+    {
+        if(!node || !node.IsMap())
+            throw std::runtime_error("Camera section must be a mapping");
+
+        const YAML::Node res_node = node["resolution"];
+        if(!res_node || !res_node.IsSequence() || res_node.size() < 2)
+            throw std::runtime_error("Camera missing resolution");
+
+        auto res_values = as_double_list(res_node);
+        if(res_values.size() < 2)
+            throw std::runtime_error("Camera missing resolution values");
+
+        int width = static_cast<int>(res_values[0]);
+        int height = static_cast<int>(res_values[1]);
+        if(width <= 0 || height <= 0)
+            throw std::runtime_error("Camera resolution must be positive");
+
+        cam.image_width = width;
+        cam.aspect_ratio
+          = static_cast<double>(width) / static_cast<double>(height);
+
+        // Vertical FOV in degrees (vfov/fov); clamped to a reasonable range.
+        double vfov_deg = cam.vfov;
+        if(node["vfov"] || node["fov"])
+            {
+                vfov_deg
+                  = as_double(node["vfov"], as_double(node["fov"], vfov_deg));
+            }
+        vfov_deg = std::clamp(vfov_deg, 1.0, 179.0);
+        cam.vfov = vfov_deg;
+
+        cam.focus_dist = as_double(node["focus_distance"], cam.focus_dist);
+        cam.defocus_angle = 0.0; // disable depth of field by default
+
+        cam.lookfrom = point3(
+          as_vec3(node["location"],
+                  vec3(cam.lookfrom.x(), cam.lookfrom.y(), cam.lookfrom.z())));
+        cam.lookat = point3(
+          as_vec3(node["look_at"],
+                  vec3(cam.lookat.x(), cam.lookat.y(), cam.lookat.z())));
+        cam.vup = as_vec3(node["up"], cam.vup);
+        cam.background = as_color_01(node["background"], cam.background);
+
+        cam.samples_per_pixel
+          = as_int(node["samples_per_pixel"], cam.samples_per_pixel);
+        cam.max_depth = as_int(node["max_depth"], cam.max_depth);
+
+        std::string output = as_string(node["output"]);
+        if(!output.empty())
+            cam.file_name = output;
+    }
 
 } // namespace scene_loader_detail
 
-inline scene_load_result load_scene_from_yaml(const std::string& path) {
+// -----------------------------------------------------------------------------
+// Top-level scene loader
+// -----------------------------------------------------------------------------
+
+inline scene_load_result load_scene_from_yaml(const std::string &path)
+{
     YAML::Node root = YAML::LoadFile(path);
-    if (!root || !root.IsMap())
+    if(!root || !root.IsMap())
         throw std::runtime_error("Scene root must be a mapping");
 
     scene_load_result result;
+
+    // Camera
     scene_loader_detail::load_camera_from_yaml(root["camera"], result.cam);
 
-    // Materials map (optional)
+    // Materials (optional)
     auto materials = scene_loader_detail::load_materials(root["materials"]);
 
-    // Prefer 'surfaces' (coffee_machine.yaml), fallback to 'scene' (legacy)
-    YAML::Node surfaces_node = root["surfaces"];
-    if (!surfaces_node)
-        surfaces_node = root["scene"];
-    if (!surfaces_node || !surfaces_node.IsSequence())
-        throw std::runtime_error("Scene/surfaces field missing or not a sequence");
+    // Prefer "surfaces", fall back to "scene" for older files
+    YAML::Node surfaces = root["surfaces"];
+    if(!surfaces)
+        surfaces = root["scene"];
+    if(!surfaces || !surfaces.IsSequence())
+        throw std::runtime_error("Scene/surfaces field must be a sequence");
 
-    const std::filesystem::path yaml_dir = std::filesystem::path(path).parent_path();
+    const std::filesystem::path yaml_dir
+      = std::filesystem::path(path).parent_path();
 
-    for (const auto& mesh : surfaces_node) {
-        if (!mesh.IsMap())
-            throw std::runtime_error("Scene entries must be mappings");
+    for(const auto &mesh : surfaces)
+        {
+            if(!mesh.IsMap())
+                throw std::runtime_error("Scene entries must be mappings");
 
-        std::string mesh_type = scene_loader_detail::node_to_string(mesh["type"]);
-        if (mesh_type.empty())
-            throw std::runtime_error("Mesh missing type field");
+            const std::string type
+              = scene_loader_detail::as_string(mesh["type"]);
+            if(type.empty())
+                throw std::runtime_error("Mesh missing type field");
 
-        if (mesh_type == "TriMesh") {
-            scene_loader_detail::load_tri_mesh(mesh, result.world, result.lights);
-        } else if (mesh_type == "Sphere") {
-            scene_loader_detail::load_sphere(mesh, result.world, result.lights);
-        } else if (mesh_type == "mesh") {
-            scene_loader_detail::load_indexed_mesh(mesh, result.world, result.lights, materials);
-        } else if (mesh_type == "object") {
-            scene_loader_detail::load_object(mesh, yaml_dir, result.world, result.lights, materials);
-        } else {
-            std::cerr << "Unknown mesh type: " << mesh_type << "\n";
+            using namespace scene_loader_detail;
+
+            if(type == "TriMesh")
+                {
+                    load_tri_mesh(mesh, result.world, result.lights);
+                }
+            else if(type == "Sphere")
+                {
+                    load_sphere(mesh, result.world, result.lights);
+                }
+            else if(type == "mesh")
+                {
+                    load_indexed_mesh(mesh, result.world, result.lights,
+                                      materials);
+                }
+            else if(type == "object")
+                {
+                    load_object(mesh, yaml_dir, result.world, result.lights,
+                                materials);
+                }
+            else
+                {
+                    std::cerr << "Unknown mesh type: " << type << "\n";
+                }
         }
-    }
 
     std::cout << "Triangles: " << result.world.size() << "\n";
     return result;
 }
 
-#endif
+#endif // SCENE_LOADER_H
