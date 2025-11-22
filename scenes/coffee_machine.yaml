@@ -8,12 +8,14 @@ camera:
 materials:
   Plastic_Orange:
     type: disney
-    # Orange color [255, 97, 3] normalized
-    base_color: [1.0, 0.38, 0.012]  # Orange color normalized
+    # Orange color [255, 97, 3] normalized to 0-1 range
+    base_color: [1.0, 0.38, 0.012]  # Orange color
     metallic: 0.0
     roughness: 0.7
     ior: 1.5
     relative_ior: 1.5
+    # Add slight specular reflection for plastic look
+    specular_tint: 0.0
   Plastic_Black:
     type: disney
     base_color: [0.02, 0.02, 0.02]  # Very dark base color for black plastic
@@ -22,17 +24,21 @@ materials:
     ior: 1.5
     relative_ior: 1.5
   Glass:
-    type: dielectric
+    type: disney
+    base_color: [1.0, 1.0, 1.0]  # White glass
+    metallic: 0.0
+    spec_trans: 1.0  # Full specular transmission for clear glass
+    roughness: 0.0  # Clear glass - no roughness
     ior: 1.5
-    spec_trans: 1.0
+    relative_ior: 1.5
   Metal:
     type: disney
-    base_color: [0.6, 0.6, 0.6]  # Metal reflection color
+    base_color: [0.9, 0.9, 0.95]  # Slightly bluish metal reflection color
     metallic: 1.0
     roughness: 0.1
   Floor:
     type: disney
-    base_color: [0.5, 0.5, 0.5]  # Neutral gray floor
+    base_color: [0.3, 0.3, 0.3]  # Darker gray floor
     metallic: 0.0
     roughness: 0.75
     ior: 1.5

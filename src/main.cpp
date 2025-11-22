@@ -7,6 +7,7 @@
 #include "triangle.h"
 #include "scene_loader.h"
 #include "renderers/bidirectional_path_tracer.h"
+#include "renderers/unidirectional_path_tracer.h"
 
 #include <iostream>
 
@@ -80,7 +81,7 @@ int main(int argc, char** argv) {
             auto scene = load_scene_from_yaml(argv[1]);
             auto world_bvh = make_shared<bvh_node>(scene.world);
             const triangle_collection& lights = scene.lights.empty() ? scene.world : scene.lights;
-            BidirectionalPathTracer renderer(scene.cam, *world_bvh, lights);
+            UnidirectionalPathTracer renderer(scene.cam, *world_bvh, lights);
             renderer.render();
         } else {
             cornell_box();
