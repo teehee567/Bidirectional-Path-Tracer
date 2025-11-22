@@ -1,0 +1,164 @@
+camera:
+  resolution: [800, 800]
+  fov: 25
+  # Extracted from the translation column of the 'toWorld' matrix
+  location: [-0.0893585, 2.9412, 25.6726]
+  # Camera looking towards the origin where objects are located
+  look_at: [0.0, 2, 0.0]
+  aperture_radius: 0
+  samples_per_pixel: 256
+  max_depth: 33
+
+materials:
+  # Backdrop - rough conductor (metallic) with blue hue
+  Backdrop:
+    type: disney
+    base_color: [0.4, 0.5, 0.7]
+    metallic: 1.0
+    roughness: 0.1
+
+  # Floor - rough conductor (metallic) with blue hue
+  Floor:
+    type: disney
+    base_color: [0.4, 0.5, 0.7]
+    metallic: 1.0
+    roughness: 0.1
+
+  # Water-Air interface (water IOR = 1.33)
+  WaterAir:
+    type: glass
+    ior: 1.33
+    tint: [1.0, 1.0, 1.0]
+
+  # Ice-Air interface (ice IOR = 1.31)
+  IceAir:
+    type: glass
+    ior: 1.31
+    tint: [1.0, 1.0, 1.0]
+
+  # Glass material (IOR = 1.5)
+  Glass:
+    type: glass
+    ior: 1.5
+    tint: [1.0, 1.0, 1.0]
+
+  # Air-Ice interface (inverse of IceAir, IOR = 1/1.31 ≈ 0.763)
+  # Represented as glass with IOR 1.31 (the system handles the interface correctly)
+  AirIce:
+    type: glass
+    ior: 1.31
+    tint: [1.0, 1.0, 1.0]
+
+  # Area light material
+  LightMat:
+    type: light
+    emission: [50.9155, 50.0563, 50.831]
+
+surfaces:
+  # --- Water meshes ---
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh008.obj"
+    material: "WaterAir"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh005.obj"
+    material: "WaterAir"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh000.obj"
+    material: "WaterAir"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  # --- Ice meshes (IceAir) ---
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh004.obj"
+    material: "IceAir"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh010.obj"
+    material: "IceAir"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh014.obj"
+    material: "IceAir"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh006.obj"
+    material: "IceAir"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh001.obj"
+    material: "IceAir"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  # --- Ice meshes (AirIce - with faceNormals) ---
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh003.obj"
+    material: "AirIce"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh009.obj"
+    material: "AirIce"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh012.obj"
+    material: "AirIce"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh015.obj"
+    material: "AirIce"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh002.obj"
+    material: "AirIce"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  # --- Backdrop ---
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh007.obj"
+    material: "Backdrop"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  # --- Floor ---
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh011.obj"
+    material: "Floor"
+    transform: [2, 0, 0, 0,  0, 1, 0, 0,  0, 0, 2, 0,  0, 0, 0, 1]
+
+  # --- Glass container ---
+  - type: "obj"
+    filename: "data/glass-of-water/models/Mesh013.obj"
+    material: "Glass"
+    transform: [1, 0, 0, 0,  0, 1, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  # --- Area Light (Rectangle) ---
+  # Mitsuba rectangle is a unit rectangle that gets transformed
+  # Unit rectangle corners: [-0.5, -0.5, 0], [0.5, -0.5, 0], [0.5, 0.5, 0], [-0.5, 0.5, 0]
+  # Transform matrix from XML applied to these corners
+  - type: "mesh"
+    smooth: false
+    material: "LightMat"
+    vertices: [
+      [-0.5, -0.5, 0],
+      [ 0.5, -0.5, 0],
+      [ 0.5,  0.5, 0],
+      [-0.5,  0.5, 0]
+    ]
+    triangles: [[0, 1, 2], [0, 2, 3]]
+    transform: [
+      5, 4.86887e-007, 1.77975e-007, -0.0384822,
+      4.86887e-007, -3.82133, -3.22451, 10.4809,
+      -1.77975e-007, 3.22451, -3.82133, 26.1925,
+      0, 0, 0, 1
+    ]
+

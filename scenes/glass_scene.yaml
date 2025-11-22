@@ -1,0 +1,57 @@
+camera:
+  resolution: [800, 800]
+  # fov: 34.38
+  fov: 120.38
+  location: [2.0, 1.5, 1.5]  # Positioned to view the shadow
+  look_at: [0.0, -1.0, 0.0]   # Looking at the shadow on baseplate
+  samples_per_pixel: 4
+  max_depth: 50
+
+materials:
+  Glass:
+    type: glass
+    ior: 1.5
+    tint: [1.0, 1.0, 1.0]
+
+  LightMat:
+    type: light
+    emission: [220, 220, 220]
+
+  Baseplate:
+    type: disney
+    base_color: [54, 39, 25]  # Dark grey
+    metallic: 0.0
+    roughness: 0.8
+
+surfaces:
+  # --- Baseplate ---
+  - type: "mesh"
+    smooth: false
+    material: "Baseplate"
+    vertices: [
+      [-5.0, -1.0, -5.0],
+      [ 5.0, -1.0, -5.0],
+      [ 5.0, -1.0,  5.0],
+      [-5.0, -1.0,  5.0]
+    ]
+    triangles: [[0, 1, 2], [0, 2, 3]]
+
+  # --- Glass Model (centered) ---
+  - type: "obj"
+    filename: "data/glass_scene/glass_0.obj"
+    material: "Glass"
+    transform: [2, 0, 0, 0,  0, 2, 0, 0,  0, 0, 2, 0,  0, 0, 0, 1]
+
+  # --- Square Light (0.3x0.3 for sharp caustics, positioned to cast shadow) ---
+  - type: "mesh"
+    smooth: false
+    material: "LightMat"
+    # Positioned to cast visible shadow on baseplate from centered glass
+    vertices: [
+      [1.85, 0.2, 1.35],   # Bottom-left
+      [2.15, 0.2, 1.35],   # Bottom-right
+      [2.15, 0.2, 1.65],   # Top-right
+      [1.85, 0.2, 1.65]    # Top-left
+    ]
+    triangles: [[0, 1, 2], [0, 2, 3]]
+

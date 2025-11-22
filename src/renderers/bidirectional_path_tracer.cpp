@@ -157,9 +157,14 @@ color BidirectionalPathTracer::render_pixel(int i, int j) const {
             int n_cam = static_cast<int>(cam_path.size());
             int n_light = static_cast<int>(light_path.size());
 
-            for (int t = 1; t <= n_cam; ++t) {
-                for (int s = 0; s <= n_light; ++s) {
-                    sample_L += evaluate_connection(cam_path, light_path, s, t);
+            // Handle background: if camera path is empty (ray didn't hit anything), add background
+            if (n_cam == 0) {
+                sample_L = cam.background;
+            } else {
+                for (int t = 1; t <= n_cam; ++t) {
+                    for (int s = 0; s <= n_light; ++s) {
+                        sample_L += evaluate_connection(cam_path, light_path, s, t);
+                    }
                 }
             }
             pixel_acc += sample_L;

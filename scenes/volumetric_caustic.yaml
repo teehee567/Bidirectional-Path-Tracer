@@ -6,8 +6,8 @@ camera:
   # Looking down -Z axis towards the box center
   look_at: [0.0, 1.0, 0.0]
   aperture_radius: 0
-  background: [0.2, 0.2, 0.2]
-  samples_per_pixel: 2
+  background: [0, 0, 0]
+  samples_per_pixel: 40
   max_depth: 20
 
 materials:

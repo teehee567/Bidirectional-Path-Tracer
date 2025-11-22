@@ -6,7 +6,6 @@ camera:
   # Camera is looking back at the origin where the objects are located
   look_at: [0.0, 0.0, 0.0] 
   aperture_radius: 0
-  background: [0.9, 0.9, 0.9]
   samples_per_pixel: 4
 
 materials:
