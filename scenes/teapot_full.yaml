@@ -1,0 +1,98 @@
+camera:
+  resolution: [1280, 720]
+  fov: 35
+  # Extracted from the translation column of the 'toWorld' matrix
+  location: [23.1701, 15.7142, -0.172476]
+  # Camera is looking back at the origin where the objects are located
+  look_at: [0.0, 0.0, 0.0] 
+  aperture_radius: 0
+  background: [0.9, 0.9, 0.9]
+  samples_per_pixel: 4
+
+materials:
+  # Averaged color of the checkerboard: 
+  # (0.325 + 0.725)/2, (0.31 + 0.71)/2, (0.25 + 0.68)/2
+  FloorMat:
+    type: disney
+    base_color: [0.5, 0.5, 0.5]  # Darker gray floor
+    metallic: 0.0
+    roughness: 0.75
+    ior: 1.5
+    relative_ior: 1.5
+
+  glass_material:
+    type: glass
+    ior: 1.5
+    tint: [1.0, 1.0, 1.0]
+
+  # Represents the liquid (Water/Whiskey)
+  LiquidMat:
+    type: glass
+    # Derived from sigmaA [0.14, 0.32, 0.73] -> exp(-sigma) approximation
+    # High blue absorption = Amber/Orange color
+    # Brightened tint for better visibility
+    tint: [0.95, 0.88, 0.75] 
+    ior: 1.33
+
+  # Represents Ice or Bubbles (Low IOR)
+  IceMat:
+    type: disney
+    base_color: [1.0, 1.0, 1.0]
+    roughness: 0.1 # Slight roughness for ice
+    metallic: 0.0
+    spec_trans: 1.0
+    ior: 1.13
+    thin: false
+
+  Light:
+    type: disney
+    emission: [150, 150, 150]  # Balanced light intensity
+
+surfaces:
+  # --- Floor Plane ---
+  # Floor positioned at y=0, extending large enough to be visible
+  - type: "mesh"
+    smooth: false
+    material: "FloorMat"
+    vertices: [
+      [-50.0, 0.0, -50.0],
+      [ 50.0, 0.0, -50.0],
+      [ 50.0, 0.0,  50.0],
+      [-50.0, 0.0,  50.0]
+    ]
+    triangles: [[0,1,2], [0,2,3]]
+
+  # --- Glass Container (Outer) ---
+  - type: "object"
+    smooth: true
+    file: "data/teapot-full/models/Mesh003.obj"
+    material: "glass_material"
+
+  # --- Glass Container (Inner/Details) ---
+  - type: "object"
+    smooth: true
+    file: "data/teapot-full/models/Mesh001.obj"
+    material: "glass_material"
+
+  # --- Liquid ---
+  - type: "object"
+    smooth: true
+    file: "data/teapot-full/models/Mesh002.obj"
+    material: "LiquidMat"
+
+  # --- Ice Cubes ---
+  - type: "object"
+    smooth: true
+    file: "data/teapot-full/models/Mesh000.obj"
+    material: "IceMat"
+
+  # --- Area Light Source ---
+  - type: "mesh"
+    vertices: [
+      [-5.0, 10.0, -5.0],
+      [ 5.0, 10.0, -5.0],
+      [ 5.0, 10.0,  5.0],
+      [-5.0, 10.0,  5.0]
+    ]
+    triangles: [[0,1,2], [0,2,3]]
+    material: "Light"

@@ -4,14 +4,16 @@ camera:
   aperture_radius: 0
   location: [-0.0029600381385535, 0.19830328226089478, 0.828150749206543]
   look_at: [0.002896534511819482, 0.16660931706428528, 0.022717338055372238]
+  background: [0, 0, 0]
+  samples_per_pixel: 40
 
 materials:
   Plastic_Orange:
     type: disney
     # Orange color [255, 97, 3] normalized to 0-1 range
     base_color: [1.0, 0.38, 0.012]  # Orange color
-    metallic: 0.0
-    roughness: 0.7
+    metallic: 0.2
+    roughness: 0.6
     ior: 1.5
     relative_ior: 1.5
     # Add slight specular reflection for plastic look
@@ -45,7 +47,7 @@ materials:
     relative_ior: 1.5
   Light:
     type: light
-    emission: [14, 14, 14]  # Balanced light intensity
+    emission: [9, 9, 9]  # Balanced light intensity
 surfaces:
   - type: "object"
     smooth: true

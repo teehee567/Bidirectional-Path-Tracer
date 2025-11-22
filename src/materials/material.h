@@ -295,4 +295,124 @@ inline double DisneyMaterial::pdf_value(
     return static_cast<double>(forwardPdf);
 }
 
+// Glass material optimized for caustics - perfect specular with proper Fresnel
+struct GlassMaterialParams {
+    double ior = 1.5;  // Index of refraction (glass typically 1.5)
+    color tint = color(1.0, 1.0, 1.0);  // Color tint for the glass
+};
+
+class GlassMaterial : public material {
+  public:
+    explicit GlassMaterial(const GlassMaterialParams& params)
+      : ior(params.ior),
+        tint(params.tint)
+    {}
+
+    color emitted(
+        const ray& r_in, const hit_record& rec, double u, double v, const point3& p
+    ) const override {
+        return color(0,0,0);
+    }
+
+    bool scatter(const ray& r_in, const hit_record& rec, scatter_record& srec) const override;
+
+    double scattering_pdf(const ray& r_in, const hit_record& rec, const ray& scattered)
+    const override {
+        // Delta material - PDF is infinite for exact direction, 0 otherwise
+        return 0.0;
+    }
+
+    color evaluate_bsdf(const hit_record& rec, const vec3& wi, const vec3& wo) const override {
+        // For delta materials, BSDF evaluation is only meaningful for exact directions
+        // This is used for connection in BDPT, but glass is delta so connections skip it
+        return color(0,0,0);
+    }
+
+    bool is_delta() const override {
+        return true;  // Perfect specular material
+    }
+
+  private:
+
+    static double fresnel_dielectric(double cos_theta_i, double ni, double nt) {
+        // Ensure cos_theta_i is in valid range
+        cos_theta_i = std::clamp(cos_theta_i, -1.0, 1.0);
+        
+        // Swap indices if coming from inside
+        if (cos_theta_i < 0.0) {
+            std::swap(ni, nt);
+            cos_theta_i = -cos_theta_i;
+        }
+
+        double sin_theta_i = sqrt(fmax(0.0, 1.0 - cos_theta_i * cos_theta_i));
+        double sin_theta_t = (ni / nt) * sin_theta_i;
+
+        // Total internal reflection
+        if (sin_theta_t >= 1.0) {
+            return 1.0;
+        }
+
+        double cos_theta_t = sqrt(fmax(0.0, 1.0 - sin_theta_t * sin_theta_t));
+
+        double r_parallel = ((nt * cos_theta_i) - (ni * cos_theta_t)) / 
+                           ((nt * cos_theta_i) + (ni * cos_theta_t));
+        double r_perpendicular = ((ni * cos_theta_i) - (nt * cos_theta_t)) / 
+                                ((ni * cos_theta_i) + (nt * cos_theta_t));
+
+        return (r_parallel * r_parallel + r_perpendicular * r_perpendicular) / 2.0;
+    }
+
+    double ior;
+    color tint;
+};
+
+inline bool GlassMaterial::scatter(
+    const ray& r_in,
+    const hit_record& rec,
+    scatter_record& srec
+) const {
+    vec3 unit_direction = unit_vector(r_in.direction());
+    
+    // Determine IOR based on which side we're entering from
+    double ni = rec.front_face ? 1.0 : ior;
+    double nt = rec.front_face ? ior : 1.0;
+    double etai_over_etat = ni / nt;
+
+    double cos_theta = dot(-unit_direction, rec.normal);
+    double fresnel = fresnel_dielectric(cos_theta, ni, nt);
+
+    // Sample reflection or refraction based on Fresnel
+    vec3 scattered_dir;
+    color attenuation = color(1.0, 1.0, 1.0);  // Default to white
+    
+    if (::random_double() < fresnel) {
+        // Reflect - glass reflections are typically white/clear
+        scattered_dir = reflect(unit_direction, rec.normal);
+        attenuation = color(1.0, 1.0, 1.0);
+    } else {
+        // Refract
+        scattered_dir = refract(unit_direction, rec.normal, etai_over_etat);
+        
+        // If refraction failed (total internal reflection), reflect instead
+        // Check if the refracted direction is valid
+        double sin_theta_t = (ni / nt) * sqrt(fmax(0.0, 1.0 - cos_theta * cos_theta));
+        if (sin_theta_t >= 1.0 || scattered_dir.length_squared() < 0.01) {
+            scattered_dir = reflect(unit_direction, rec.normal);
+            attenuation = color(1.0, 1.0, 1.0);
+        } else {
+            // Apply tint for transmission (light passes through glass/liquid)
+            // The tint represents the color that passes through
+            attenuation = tint;
+        }
+    }
+
+    // Offset ray origin to avoid self-intersection
+    point3 offset_origin = rec.p + (0.001 * scattered_dir);
+    srec.skip_pdf_ray = ray(offset_origin, scattered_dir, r_in.time());
+    srec.attenuation = attenuation;
+    srec.skip_pdf = true;
+    
+    return true;
+}
+
 #endif

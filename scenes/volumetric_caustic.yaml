@@ -1,0 +1,121 @@
+camera:
+  resolution: [800, 800]
+  fov: 19.5
+  # Extracted from Mitsuba "toWorld" matrix (Translation column)
+  location: [0.0, 1.0, 7.0]
+  # Looking down -Z axis towards the box center
+  look_at: [0.0, 1.0, 0.0]
+  aperture_radius: 0
+  background: [0.2, 0.2, 0.2]
+  samples_per_pixel: 2
+  max_depth: 20
+
+materials:
+  RedWall:
+    type: disney
+    base_color: [0.63, 0.065, 0.05]
+    roughness: 0.8
+    metallic: 0.0
+
+  GreenWall:
+    type: disney
+    base_color: [0.14, 0.45, 0.091]
+    roughness: 0.8
+    metallic: 0.0
+
+  WhiteWall:
+    type: disney
+    base_color: [0.725, 0.71, 0.68]
+    roughness: 0.8
+    metallic: 0.0
+
+  Glass:
+    type: glass
+    ior: 1.5
+    tint: [1, 1, 1]
+
+  LightMat:
+    type: light
+    emission: [40, 40, 40]
+
+surfaces:
+  # --- Floor (White) ---
+  - type: "mesh"
+    smooth: false
+    material: "WhiteWall"
+    vertices: [
+      [-1.0, 0.0, 1.0],
+      [ 1.0, 0.0, 1.0],
+      [ 1.0, 0.0, -1.0],
+      [-1.0, 0.0, -1.0]
+    ]
+    triangles: [[0,1,2], [0,2,3]]
+
+  # --- Ceiling (White) ---
+  - type: "mesh"
+    smooth: false
+    material: "WhiteWall"
+    vertices: [
+      [-1.0, 2.0, 1.0],
+      [ 1.0, 2.0, 1.0],
+      [ 1.0, 2.0, -1.0],
+      [-1.0, 2.0, -1.0]
+    ]
+    triangles: [[0,2,1], [0,3,2]]
+
+  # --- Back Wall (White) ---
+  - type: "mesh"
+    smooth: false
+    material: "WhiteWall"
+    vertices: [
+      [-1.0, 0.0, -1.0],
+      [ 1.0, 0.0, -1.0],
+      [ 1.0, 2.0, -1.0],
+      [-1.0, 2.0, -1.0]
+    ]
+    triangles: [[0,2,1], [0,3,2]]
+
+  # --- Left Wall (Red) ---
+  - type: "mesh"
+    smooth: false
+    material: "RedWall"
+    vertices: [
+      [-1.0, 0.0, 1.0],
+      [-1.0, 0.0, -1.0],
+      [-1.0, 2.0, -1.0],
+      [-1.0, 2.0, 1.0]
+    ]
+    triangles: [[0,1,2], [0,2,3]]
+
+  # --- Right Wall (Green) ---
+  - type: "mesh"
+    smooth: false
+    material: "GreenWall"
+    vertices: [
+      [1.0, 0.0, 1.0],
+      [1.0, 0.0, -1.0],
+      [1.0, 2.0, -1.0],
+      [1.0, 2.0, 1.0]
+    ]
+    triangles: [[0,2,1], [0,3,2]]
+
+  # --- Light (Area Light on Ceiling) ---
+  - type: "mesh"
+    smooth: false
+    material: "LightMat"
+    # Approximate geometry based on Mitsuba light transform
+    vertices: [
+      [-0.25, 1.98, -0.25],
+      [ 0.25, 1.98, -0.25],
+      [ 0.25, 1.98,  0.25],
+      [-0.25, 1.98,  0.25]
+    ]
+    triangles: [[0,1,2], [0,2,3]]
+
+  # --- Glass Sphere ---
+  # If your engine does not support type: "sphere", you must replace this 
+  # with a path to a sphere .obj file.
+  - type: "sphere"
+    radius: 0.3
+    center: [-0.22827, 0.3, 0.152505]
+    material: "Glass"

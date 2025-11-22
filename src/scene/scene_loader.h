@@ -188,6 +188,14 @@ namespace scene_loader_detail
 
         const std::string type = as_string(node["type"], "disney");
 
+        // Handle glass material type
+        if (type == "glass") {
+            GlassMaterialParams glass_params;
+            glass_params.ior = as_double(node["ior"], 1.5);
+            glass_params.tint = as_color_scaled(node["tint"], color(1.0, 1.0, 1.0));
+            glass_params.tint = as_color_scaled(node["color"], glass_params.tint);
+            return std::make_shared<GlassMaterial>(glass_params);
+        }
 
         return std::make_shared<DisneyMaterial>(p);
     }
@@ -322,19 +330,33 @@ namespace scene_loader_detail
     }
 
     // "Sphere": data.center, data.radius, and a material.
-    inline void load_sphere(const YAML::Node &mesh, triangle_collection &world,
-                            triangle_collection &lights)
+    inline void load_sphere(
+      const YAML::Node &mesh, triangle_collection &world,
+      triangle_collection &lights,
+      const std::unordered_map<std::string, std::shared_ptr<material>>
+        &materials)
     {
-        auto mat = build_material(mesh["material"]);
+        std::shared_ptr<material> mat;
+        const YAML::Node mat_node = mesh["material"];
+        if(mat_node)
+            {
+                if(mat_node.IsScalar())
+                    {
+                        const std::string mat_name = as_string(mat_node);
+                        auto it = materials.find(mat_name);
+                        if(it != materials.end())
+                            mat = it->second;
+                    }
+                else if(mat_node.IsMap())
+                    {
+                        mat = build_material(mat_node);
+                    }
+            }
         if(!mat)
-            throw std::runtime_error("Sphere missing or invalid material");
+            mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
 
-        const YAML::Node data = mesh["data"];
-        if(!data || !data.IsMap())
-            throw std::runtime_error("Sphere missing data field");
-
-        vec3 center_vec = as_vec3(data["center"], vec3(0, 0, 0));
-        double radius = as_double(data["radius"], 0.0);
+        vec3 center_vec = as_vec3(mesh["center"], vec3(0, 0, 0));
+        double radius = as_double(mesh["radius"], 0.0);
         if(radius <= 0.0)
             throw std::runtime_error("Sphere missing or invalid radius");
 
@@ -560,7 +582,7 @@ namespace scene_loader_detail
           as_vec3(node["look_at"],
                   vec3(cam.lookat.x(), cam.lookat.y(), cam.lookat.z())));
         cam.vup = as_vec3(node["up"], cam.vup);
-        cam.background = as_color_01(node["background"], cam.background);
+        cam.background = as_color_scaled(node["background"], cam.background);
 
         cam.samples_per_pixel
           = as_int(node["samples_per_pixel"], cam.samples_per_pixel);
@@ -617,9 +639,9 @@ inline scene_load_result load_scene_from_yaml(const std::string &path)
                 {
                     load_tri_mesh(mesh, result.world, result.lights);
                 }
-            else if(type == "Sphere")
+            else if(type == "sphere")
                 {
-                    load_sphere(mesh, result.world, result.lights);
+                    load_sphere(mesh, result.world, result.lights, materials);
                 }
             else if(type == "mesh")
                 {

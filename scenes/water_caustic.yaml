@@ -1,0 +1,142 @@
+camera:
+  resolution: [1024, 1024]
+  fov: 19.5
+  location: [0.0, 0.99, 6.84]
+  look_at: [0.0, 0.99, 0.0]
+  aperture_radius: 0
+  background: [0.0, 0.0, 0.0]
+  samples_per_pixel: 16
+  max_depth: 20
+
+materials:
+  RedWall:
+    type: disney
+    base_color: [0.63, 0.065, 0.05]
+    roughness: 0.8
+    metallic: 0.0
+
+  GreenWall:
+    type: disney
+    base_color: [0.14, 0.45, 0.091]
+    roughness: 0.8
+    metallic: 0.0
+
+  WhiteWall:
+    type: disney
+    base_color: [0.725, 0.71, 0.68]
+    roughness: 0.8
+    metallic: 0.0
+
+  # Material for the Light shape (Black reflectance, emission handled separately)
+  LightMat:
+    type: light
+    # Scaled down from the raw XML values (541127, ...) to reasonable HDR range
+    emission: [54.1, 38.2, 12.7] 
+
+  WaterMat:
+    type: glass
+    ior: 1.8
+    tint: [1.0, 1.0, 1.0]
+
+surfaces:
+  # --- Floor (White) ---
+  - type: "mesh"
+    smooth: false
+    material: "WhiteWall"
+    vertices: [
+      [-1.0, 0.0, 1.0],
+      [ 1.0, 0.0, 1.0],
+      [ 1.0, 0.0, -1.0],
+      [-1.0, 0.0, -1.0]
+    ]
+    triangles: [[0,1,2], [0,2,3]]
+
+  # --- Ceiling (White) ---
+  - type: "mesh"
+    smooth: false
+    material: "WhiteWall"
+    vertices: [
+      [-1.0, 2.0, 1.0],
+      [ 1.0, 2.0, 1.0],
+      [ 1.0, 2.0, -1.0],
+      [-1.0, 2.0, -1.0]
+    ]
+    triangles: [[0,2,1], [0,3,2]]
+
+  # --- Back Wall (White) ---
+  - type: "mesh"
+    smooth: false
+    material: "WhiteWall"
+    vertices: [
+      [-1.0, 0.0, -1.0],
+      [ 1.0, 0.0, -1.0],
+      [ 1.0, 2.0, -1.0],
+      [-1.0, 2.0, -1.0]
+    ]
+    triangles: [[0,2,1], [0,3,2]]
+
+  # --- Left Wall (Red) ---
+  - type: "mesh"
+    smooth: false
+    material: "RedWall"
+    vertices: [
+      [-1.0, 0.0, 1.0],
+      [-1.0, 0.0, -1.0],
+      [-1.0, 2.0, -1.0],
+      [-1.0, 2.0, 1.0]
+    ]
+    triangles: [[0,1,2], [0,2,3]]
+
+  # --- Right Wall (Green) ---
+  - type: "mesh"
+    smooth: false
+    material: "GreenWall"
+    vertices: [
+      [1.0, 0.0, 1.0],
+      [1.0, 0.0, -1.0],
+      [1.0, 2.0, -1.0],
+      [1.0, 2.0, 1.0]
+    ]
+    triangles: [[0,2,1], [0,3,2]]
+
+  # --- Light (Area Light on Ceiling) ---
+  - type: "mesh"
+    smooth: false
+    material: "LightMat"
+    vertices: [
+      [-0.25, 1.98, -0.25],
+      [ 0.25, 1.98, -0.25],
+      [ 0.25, 1.98,  0.25],
+      [-0.25, 1.98,  0.25]
+    ]
+    triangles: [[0,1,2], [0,2,3]]
+
+  # --- Imported OBJ Meshes (Water) ---
+  - type: "obj"
+    filename: "data/water-caustic/models/Mesh001.obj"
+    material: "WaterMat"
+    # 1.5 scaling on Y axis based on XML matrix
+    transform: [1, 0, 0, 0,  0, 1.5, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "obj"
+    filename: "data/water-caustic/models/Mesh000.obj"
+    material: "WaterMat"
+    transform: [1, 0, 0, 0,  0, 1.5, 0, 0,  0, 0, 1, 0,  0, 0, 0, 1]
+
+  - type: "cube"
+    material: "WhiteWall"
+    transform: [
+      0.146195, -0.0660334, 7.05432e-009, 0.5132, 
+      6.3904e-009, -2.88641e-009, -0.161384, 0.15215, 
+      0.0649865, 0.148551, 3.08354e-016, 0.44471, 
+      0, 0, 0, 1
+    ]
+
+  - type: "cube"
+    material: "WhiteWall"
+    transform: [
+      0.160273, 0.064934, 1.30874e-015, -0.528405, 
+      -2.88371e-009, 6.89559e-009, -0.342479, 0.335942, 
+      -0.0659716, 0.157753, 1.49702e-008, -0.291415, 
+      0, 0, 0, 1
+    ]

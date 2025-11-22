@@ -82,6 +82,7 @@ int main(int argc, char** argv) {
             auto world_bvh = make_shared<bvh_node>(scene.world);
             const triangle_collection& lights = scene.lights.empty() ? scene.world : scene.lights;
             UnidirectionalPathTracer renderer(scene.cam, *world_bvh, lights);
+            // BidirectionalPathTracer renderer(scene.cam, *world_bvh, lights);
             renderer.render();
         } else {
             cornell_box();
