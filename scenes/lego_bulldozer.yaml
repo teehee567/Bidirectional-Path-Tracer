@@ -1,0 +1,256 @@
+camera:
+  resolution: [192, 108]
+  fov: 30
+  aperture_radius: 0
+  location: [1.05, 0.32, 0.4]
+  look_at: [0.03, 0.073, 0.06]
+  samples_per_pixel: 4
+  max_depth: 20
+  output: "lego_bulldozer.png"
+
+materials:
+  default:
+    type: disney
+    base_color: [0.8, 0.8, 0.8]       # 204/255
+    specular_tint: 0.5
+    roughness: 0.35
+    sheen_tint: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.0
+    relative_ior: 1.0
+
+  Background:
+    type: disney
+    base_color: [0.4, 0.4, 0.4]       # 102/255
+    emission: [10000, 10000, 10000]   # kept as-is; your loader will clamp
+    specular_tint: 0.5
+    roughness: 0.35
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.45
+    relative_ior: 1.45
+
+  Black:
+    type: disney
+    base_color: [0.004, 0.004, 0.004] # 1/255
+    specular_tint: 0.5
+    roughness: 0.05
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.5
+    relative_ior: 1.5
+
+  Brown:
+    type: disney
+    base_color: [0.345, 0.224, 0.153] # [88,57,39]/255
+    specular_tint: 0.5
+    roughness: 0.05
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.5
+    relative_ior: 1.5
+
+  Gray:
+    type: disney
+    base_color: [0.58, 0.604, 0.659]  # [148,154,168]/255
+    specular_tint: 0.5
+    roughness: 0.05
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.5
+    relative_ior: 1.5
+
+  Light_brown:
+    type: disney
+    base_color: [0.486, 0.314, 0.204] # [124,80,52]/255
+    specular_tint: 0.5
+    roughness: 0.05
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.5
+    relative_ior: 1.5
+
+  blue_light:
+    type: disney
+    base_color: [0.902, 0.922, 0.922] # [230,235,235]/255
+    metallic: 0.0
+    roughness: 0.3
+    ior: 1.5
+    relative_ior: 1.5
+
+  orange_light:
+    type: disney
+    base_color: [0.922, 0.922, 0.922] # [235,235,235]/255
+    metallic: 0.0
+    roughness: 0.3
+    ior: 1.5
+    relative_ior: 1.5
+
+  Red_Glass:
+    type: disney
+    base_color: [1.0, 0.129, 0.043]   # [255,33,11]/255
+    roughness: 0.05
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 1.0
+    ior: 1.46
+    relative_ior: 1.46
+
+  RubberBand:
+    type: disney
+    base_color: [0.141, 0.141, 0.141] # [36,36,36]/255
+    roughness: 0.1
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.5
+    relative_ior: 1.5
+
+  Sand:
+    type: disney
+    base_color: [0.753, 0.69, 0.537]  # [192,176,137]/255
+    roughness: 0.05
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.5
+    relative_ior: 1.5
+
+  transparent:
+    type: disney
+    base_color: [1.0, 1.0, 1.0]
+    roughness: 0.05
+    metallic: 0.0
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 1.0
+    ior: 1.46
+    relative_ior: 1.46
+
+  Yellow:
+    type: disney
+    base_color: [0.906, 0.737, 0.188] # [231,188,48]/255
+    specular_tint: 0.3
+    roughness: 0.05
+    metallic: 0.3
+    subsurface: 0.0
+    anisotropic: 0.0
+    sheen: 0.0
+    sheen_tint: 0.0
+    clearcoat: 0.0
+    clearcoat_roughness: 0.0
+    spec_trans: 0.0
+    ior: 1.5
+    relative_ior: 1.5
+
+surfaces:
+  # Uncomment if you want an emissive backdrop
+  # - type: "object"
+  #   smooth: true
+  #   file: "data/lego_bulldozer/Background.obj"
+  #   material: "Background"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/Black.obj"
+    material: "Black"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/Brown.obj"
+    material: "Brown"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/Gray.obj"
+    material: "Gray"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/Light_brown.obj"
+    material: "Light_brown"
+
+  # Uncomment these if you want light meshes for the headlights
+  # - type: "object"
+  #   smooth: false
+  #   file: "data/lego_bulldozer/left_light.obj"
+  #   material: "blue_light"
+  # - type: "object"
+  #   smooth: false
+  #   file: "data/lego_bulldozer/right_light.obj"
+  #   material: "orange_light"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/Red_Glass.obj"
+    material: "Red_Glass"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/RubberBand.obj"
+    material: "RubberBand"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/Sand.obj"
+    material: "Sand"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/transparent.obj"
+    material: "transparent"
+
+  - type: "object"
+    smooth: true
+    file: "data/lego_bulldozer/Yellow.obj"
+    material: "Yellow"

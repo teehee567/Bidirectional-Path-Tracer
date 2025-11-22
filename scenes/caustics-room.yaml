@@ -1,0 +1,143 @@
+camera:
+  resolution: [1024, 1024]
+  fov: 35
+  aperture_radius: 0
+  # From Mitsuba sensor.to_world
+  location: [-0.0893585, 2.69412, 25.6726]
+  look_at:  [-0.0930944, 2.7099755, 24.6727327]
+  up: [0.0, 1.0, 0.0]
+  samples_per_pixel: 64
+  max_depth: 7
+  output: "mitsuba_glass_scene.png"
+
+materials:
+  Diffuse:
+    type: disney
+    # Mitsuba reflectance 0.5,0.5,0.5  (neutral gray)
+    base_color: [0.5, 0.5, 0.5]
+    metallic: 0.0
+    roughness: 0.7
+    ior: 1.5
+    relative_ior: 1.5
+
+  Wood:
+    type: disney
+    # Mitsuba base color ~[0.32963, 0.257976, 0.150292]
+    base_color: [0.33, 0.26, 0.15]
+    metallic: 0.0
+    roughness: 0.8
+    ior: 1.5
+    relative_ior: 1.5
+
+  Lamp:
+    type: disney
+    # White metal with some gloss
+    base_color: [0.9, 0.9, 0.95]
+    metallic: 1.0
+    roughness: 0.25
+
+  Glass:
+    type: disney
+    base_color: [1.0, 1.0, 1.0]
+    metallic: 0.0
+    spec_trans: 0.9     # strong transmission for clear glass
+    roughness: 0.0
+    ior: 1.5
+    relative_ior: 1.5
+
+  LightRect1:
+    type: light
+    # Dimmer rectangular light (scaled into the same ballpark as the coffee-maker light)
+    # Coffee-maker light was [14,14,14] in 0–255 space.
+    emission: [2, 2, 2]
+
+  LightRect2:
+    type: light
+    # Brighter, warmer key light (scaled from Mitsuba radiance into ~0–255 range,
+    # then downscaled so the max component is ~14 like the working scene)
+    emission: [14, 10, 7]
+
+surfaces:
+  # Lamp geometry (rough conductor in Mitsuba)
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh007.obj"
+    material: "Lamp"
+
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh001.obj"
+    material: "Lamp"
+
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh005.obj"
+    material: "Lamp"
+
+  # Diffuse geometry (walls / backdrops / extra bits)
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh004.obj"
+    material: "Diffuse"
+
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh008.obj"
+    material: "Diffuse"
+
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh011.obj"
+    material: "Diffuse"
+
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh003.obj"
+    material: "Diffuse"
+
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh009.obj"
+    material: "Diffuse"
+
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh006.obj"
+    material: "Diffuse"
+
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh010.obj"
+    material: "Diffuse"
+
+  # Wood table / base
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh000.obj"
+    material: "Wood"
+
+  # Glass object
+  - type: "object"
+    smooth: true
+    file: "data/caustics-room/Mesh002.obj"
+    material: "Glass"
+
+  # === Area light 1 (rectangle in Mitsuba Diffuse_0002) ===
+  - type: "mesh"
+    vertices:
+      - [-2.619487, 6.0,      2.451523]
+      - [-2.619488, 6.0,      2.727277]
+      - [-2.343733, 5.999999, 2.727277]
+      - [-2.343732, 5.999999, 2.451523]
+    triangles: [[0, 1, 2], [0, 2, 3]]
+    material: "LightRect1"
+
+  # === Area light 2 (rectangle in Mitsuba Diffuse_0003) ===
+  - type: "mesh"
+    vertices:
+      - [-2.719300, 5.138221, -3.752099]
+      - [-2.729408, 5.077219, -3.780385]
+      - [-2.662340, 5.070119, -3.789041]
+      - [-2.652232, 5.131121, -3.760755]
+    triangles: [[0, 1, 2], [0, 2, 3]]
+    material: "LightRect2"

@@ -71,7 +71,7 @@ void cornell_box() {
     cam.file_name = "cornell_box.png";
 
     auto world_bvh = make_shared<bvh_node>(world);
-    BidirectionalPathTracer renderer(cam, *world_bvh, lights);
+    UnidirectionalPathTracer renderer(cam, *world_bvh, lights);
     renderer.render();
 }
 
