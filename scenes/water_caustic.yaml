@@ -5,7 +5,7 @@ camera:
   look_at: [0.0, 0.99, 0.0]
   aperture_radius: 0
   background: [0.0, 0.0, 0.0]
-  samples_per_pixel: 64
+  samples_per_pixel: 4
   max_depth: 20
 
 materials:

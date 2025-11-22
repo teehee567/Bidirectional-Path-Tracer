@@ -1,0 +1,223 @@
+camera:
+  resolution: [800, 800]
+  fov: 35.0
+  location: [16.2155, 4.05167, 0.0114864]
+  look_at: [-0.843684, 3.972, -0.0742318]
+  aperture_radius: 0.0
+  background: [0.0, 0.0, 0.0]
+  samples_per_pixel: 4        # from renderer.spp
+  max_depth: 5                # from integrator.max_bounces
+
+materials:
+  Diffuse:
+    type: disney
+    base_color: [0.5, 0.5, 0.5]
+    roughness: 0.8
+    metallic: 0.0
+
+  Glass:
+    type: glass
+    ior: 1.5
+    tint: [1.0, 1.0, 1.0]
+
+  LampMetal:
+    type: disney
+    base_color: [1.0, 1.0, 1.0]
+    roughness: 0.25
+    metallic: 1.0
+
+  Wood:
+    type: disney
+    base_color: [0.32963, 0.257976, 0.150292]
+    roughness: 0.8
+    metallic: 0.0
+
+  QuadLight1:
+    type: light
+    emission: [500, 500, 500]
+
+  QuadLight2:
+    type: light
+    emission: [700, 500, 360]
+
+surfaces:
+  # ... your meshes above ...
+# Mesh007 → metal lampshade (keep this so the shade is visible)
+  - type: "obj"
+    smooth: false
+    material: "LampMetal"
+    filename: "data/caustics-room/Mesh007.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+    # 004
+  - type: "obj"
+    smooth: false
+    material: "Diffuse"
+    filename: "data/caustics-room/Mesh004.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+
+  # Quad 1 area light – big ceiling panel, oriented exactly like Tungsten
+  - type: "mesh"
+    smooth: false
+    material: "QuadLight1"
+    vertices: [
+      [-2.7573645, 6.0, 2.865154],
+      [-2.7573645, 6.0, 2.313646],
+      [-2.2058555, 6.0, 2.313646],
+      [-2.2058555, 6.0, 2.865154]
+    ]
+    # Triangles using the same winding as Tungsten (normal points down)
+    triangles: [
+      [0, 1, 2],
+      [0, 2, 3]
+    ]
+
+  # Quad 2 area light – small coloured lamp, true Tungsten orientation
+  - type: "mesh"
+    smooth: false
+    material: "QuadLight2"
+    vertices: [
+      [-2.66452113, 5.17558563, -3.71178999],
+      [-2.67203452, 5.15988218, -3.84666317],
+      [-2.71711887, 5.03275437, -3.82935001],
+      [-2.70960548, 5.04845782, -3.69447683]
+    ]
+    # Winding preserved so the normal matches Tungsten
+    triangles: [
+      [0, 1, 2],
+      [0, 2, 3]
+    ]
+    
+
+  # Mesh001 → Lamp
+  - type: "obj"
+    smooth: true
+    material: "LampMetal"
+    filename: "data/caustics-room/Mesh001.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh005 → Lamp
+  - type: "obj"
+    smooth: true
+    material: "LampMetal"
+    filename: "data/caustics-room/Mesh005.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh008 → Diffuse Right side lamp shade
+  - type: "obj"
+    smooth: false
+    material: "Diffuse"
+    filename: "data/caustics-room/Mesh008.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh002 → Glass
+  - type: "obj"
+    smooth: true
+    material: "Glass"
+    filename: "data/caustics-room/Mesh002.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh011 → Diffuse
+  - type: "obj"
+    smooth: true
+    material: "Diffuse"
+    filename: "data/caustics-room/Mesh011.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh003 → Diffuse
+  - type: "obj"
+    smooth: true
+    material: "Diffuse"
+    filename: "data/caustics-room/Mesh003.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh009 → Diffuse
+  - type: "obj"
+    smooth: true
+    material: "Diffuse"
+    filename: "data/caustics-room/Mesh009.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh006 → Diffuse
+  - type: "obj"
+    smooth: true
+    material: "Diffuse"
+    filename: "data/caustics-room/Mesh006.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh000 → Wood
+  - type: "obj"
+    smooth: false
+    material: "Wood"
+    filename: "data/caustics-room/Mesh000.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  # Mesh010 → Diffuse
+  - type: "obj"
+    smooth: false
+    material: "Diffuse"
+    filename: "data/caustics-room/Mesh010.obj"
+    transform: [
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1
+    ]
+
+  
