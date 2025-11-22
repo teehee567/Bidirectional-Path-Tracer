@@ -9,6 +9,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -226,6 +227,52 @@ namespace scene_loader_detail
     }
 
     // -----------------------------------------------------------------------------
+    // Transform matrix helpers
+    // -----------------------------------------------------------------------------
+
+    // Parse a 4x4 transform matrix from YAML (16 values in row-major order)
+    inline std::vector<double> parse_transform_matrix(const YAML::Node &node)
+    {
+        std::vector<double> mat;
+        if(!node || !node.IsSequence())
+            return mat;
+
+        auto values = as_double_list(node);
+        if(values.size() == 16)
+            return values;
+        else if(values.size() > 0)
+            throw std::runtime_error("Transform matrix must have exactly 16 values");
+
+        return mat; // Empty matrix means identity (no transform)
+    }
+
+    // Apply a 4x4 transform matrix to a point (row-major order)
+    inline point3 transform_point(const point3 &p, const std::vector<double> &m)
+    {
+        if(m.empty() || m.size() != 16)
+            return p; // Identity transform
+
+        // Matrix is in row-major order: m[0-3] is row 0, m[4-7] is row 1, etc.
+        double x = p.x(), y = p.y(), z = p.z();
+        double w = 1.0;
+
+        double x_new = m[0] * x + m[1] * y + m[2] * z + m[3] * w;
+        double y_new = m[4] * x + m[5] * y + m[6] * z + m[7] * w;
+        double z_new = m[8] * x + m[9] * y + m[10] * z + m[11] * w;
+        double w_new = m[12] * x + m[13] * y + m[14] * z + m[15] * w;
+
+        // Homogeneous divide
+        if(std::abs(w_new) > 1e-10)
+            {
+                return point3(x_new / w_new, y_new / w_new, z_new / w_new);
+            }
+        else
+            {
+                return point3(x_new, y_new, z_new);
+            }
+    }
+
+    // -----------------------------------------------------------------------------
     // Geometry helpers
     // -----------------------------------------------------------------------------
 
@@ -406,6 +453,17 @@ namespace scene_loader_detail
         if(!mat)
             mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
 
+        // Parse transform matrix if present
+        std::vector<double> transform = parse_transform_matrix(mesh["transform"]);
+        if(!transform.empty())
+            {
+                // Apply transform to all vertices
+                for(auto &v : verts)
+                    {
+                        v = transform_point(v, transform);
+                    }
+            }
+
         for(const auto &tri : tris_node)
             {
                 if(!tri.IsSequence())
@@ -425,10 +483,12 @@ namespace scene_loader_detail
     }
 
     // Very small OBJ loader: supports 'v' and 'f' lines.
+    // Optionally applies a transform matrix to all vertices.
     inline void
     load_obj_file(const std::filesystem::path &obj_path,
                   const std::shared_ptr<material> &mat,
-                  triangle_collection &world, triangle_collection &lights)
+                  triangle_collection &world, triangle_collection &lights,
+                  const std::vector<double> &transform = {})
     {
         std::ifstream in(obj_path);
         if(!in)
@@ -487,12 +547,21 @@ namespace scene_loader_detail
                                 // Fan triangulation
                                 for(size_t k = 2; k < fidx.size(); ++k)
                                     {
-                                        const point3 &v0 = verts.at(
+                                        point3 v0 = verts.at(
                                           static_cast<size_t>(fidx[0]));
-                                        const point3 &v1 = verts.at(
+                                        point3 v1 = verts.at(
                                           static_cast<size_t>(fidx[k - 1]));
-                                        const point3 &v2 = verts.at(
+                                        point3 v2 = verts.at(
                                           static_cast<size_t>(fidx[k]));
+                                        
+                                        // Apply transform if provided
+                                        if(!transform.empty())
+                                            {
+                                                v0 = transform_point(v0, transform);
+                                                v1 = transform_point(v1, transform);
+                                                v2 = transform_point(v2, transform);
+                                            }
+                                        
                                         add_triangle_with_lights(
                                           world, lights, v0, v1, v2, mat);
                                     }
@@ -534,6 +603,117 @@ namespace scene_loader_detail
             mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
 
         load_obj_file(obj_path, mat, world, lights);
+    }
+
+    // "obj": loads an external OBJ using "filename" field, supports transforms.
+    inline void
+    load_obj(const YAML::Node &node, const std::filesystem::path &yaml_dir,
+             triangle_collection &world, triangle_collection &lights,
+             const std::unordered_map<std::string,
+                                      std::shared_ptr<material>> &materials)
+    {
+        const std::string file_rel = as_string(node["filename"]);
+        if(file_rel.empty())
+            throw std::runtime_error("Obj missing filename field");
+
+        const std::filesystem::path obj_path = yaml_dir / file_rel;
+
+        std::shared_ptr<material> mat;
+        const YAML::Node mat_node = node["material"];
+        if(mat_node)
+            {
+                if(mat_node.IsScalar())
+                    {
+                        const std::string mat_name = as_string(mat_node);
+                        auto it = materials.find(mat_name);
+                        if(it != materials.end())
+                            mat = it->second;
+                    }
+                else if(mat_node.IsMap())
+                    {
+                        mat = build_material(mat_node);
+                    }
+            }
+        if(!mat)
+            mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
+
+        // Parse transform matrix if present
+        std::vector<double> transform = parse_transform_matrix(node["transform"]);
+
+        load_obj_file(obj_path, mat, world, lights, transform);
+    }
+
+    // "cube": creates a unit cube transformed by the given transform matrix.
+    inline void
+    load_cube(const YAML::Node &node, triangle_collection &world,
+              triangle_collection &lights,
+              const std::unordered_map<std::string,
+                                       std::shared_ptr<material>> &materials)
+    {
+        std::shared_ptr<material> mat;
+        const YAML::Node mat_node = node["material"];
+        if(mat_node)
+            {
+                if(mat_node.IsScalar())
+                    {
+                        const std::string mat_name = as_string(mat_node);
+                        auto it = materials.find(mat_name);
+                        if(it != materials.end())
+                            mat = it->second;
+                    }
+                else if(mat_node.IsMap())
+                    {
+                        mat = build_material(mat_node);
+                    }
+            }
+        if(!mat)
+            mat = std::make_shared<DisneyMaterial>(DisneyMaterialParams{});
+
+        // Parse transform matrix - required for cube
+        std::vector<double> transform = parse_transform_matrix(node["transform"]);
+        if(transform.empty())
+            throw std::runtime_error("Cube missing transform matrix");
+
+        // Create a unit cube from (-0.5, -0.5, -0.5) to (0.5, 0.5, 0.5)
+        // then apply the transform
+        point3 min_pt(-0.5, -0.5, -0.5);
+        point3 max_pt(0.5, 0.5, 0.5);
+
+        // Define cube vertices
+        point3 v000(min_pt.x(), min_pt.y(), min_pt.z());
+        point3 v001(min_pt.x(), min_pt.y(), max_pt.z());
+        point3 v010(min_pt.x(), max_pt.y(), min_pt.z());
+        point3 v011(min_pt.x(), max_pt.y(), max_pt.z());
+        point3 v100(max_pt.x(), min_pt.y(), min_pt.z());
+        point3 v101(max_pt.x(), min_pt.y(), max_pt.z());
+        point3 v110(max_pt.x(), max_pt.y(), min_pt.z());
+        point3 v111(max_pt.x(), max_pt.y(), max_pt.z());
+
+        // Apply transform to all vertices
+        v000 = transform_point(v000, transform);
+        v001 = transform_point(v001, transform);
+        v010 = transform_point(v010, transform);
+        v011 = transform_point(v011, transform);
+        v100 = transform_point(v100, transform);
+        v101 = transform_point(v101, transform);
+        v110 = transform_point(v110, transform);
+        v111 = transform_point(v111, transform);
+
+        // Define cube faces (12 triangles)
+        std::vector<std::array<point3, 3>> faces = {
+            {v001, v101, v111}, {v001, v111, v011}, // +Z
+            {v000, v010, v110}, {v000, v110, v100}, // -Z
+            {v000, v001, v011}, {v000, v011, v010}, // -X
+            {v101, v100, v110}, {v101, v110, v111}, // +X
+            {v011, v111, v110}, {v011, v110, v010}, // +Y
+            {v000, v100, v101}, {v000, v101, v001}  // -Y
+        };
+
+        for(const auto &face : faces)
+            {
+                add_triangle_with_lights(world, lights, face[0], face[1],
+                                         face[2], mat);
+            }
     }
 
     // -----------------------------------------------------------------------------
@@ -652,6 +832,15 @@ inline scene_load_result load_scene_from_yaml(const std::string &path)
                 {
                     load_object(mesh, yaml_dir, result.world, result.lights,
                                 materials);
+                }
+            else if(type == "obj")
+                {
+                    load_obj(mesh, yaml_dir, result.world, result.lights,
+                             materials);
+                }
+            else if(type == "cube")
+                {
+                    load_cube(mesh, result.world, result.lights, materials);
                 }
             else
                 {

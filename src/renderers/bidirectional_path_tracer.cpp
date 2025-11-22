@@ -30,7 +30,7 @@ namespace {
     double geometry_term(const PathVertex& v1, const PathVertex& v2) {
         vec3 d = v1.rec.p - v2.rec.p;
         double dist_sq = d.length_squared();
-        if (dist_sq <= 0) return 0.0;
+        if (dist_sq <= 1e-9) return 0.0;
         
         double dist = std::sqrt(dist_sq);
         vec3 dir = d / dist;
@@ -185,7 +185,7 @@ void BidirectionalPathTracer::generate_camera_path(ray r, std::vector<PathVertex
         v.is_delta = rec.mat->is_delta();
         v.is_light = rec.mat->is_emissive();
         v.pdf_fwd = pdf_fwd;
-        v.pdf_rev = 0.0; // Initialized to 0, updated below
+        v.pdf_rev = 0.0;
 
         path.push_back(v);
 
@@ -195,8 +195,9 @@ void BidirectionalPathTracer::generate_camera_path(ray r, std::vector<PathVertex
         }
 
         if (srec.skip_pdf) {
-            // Fix: Use explicit multiplication if *= is not overloaded for color * color
-            beta = beta * srec.attenuation;
+            // --- REVERTED TO SIMPLE LOGIC ---
+            // Camera paths do NOT need eta^2 scaling (Radiance Invariance)
+            beta = beta * srec.attenuation; 
             r = srec.skip_pdf_ray;
             pdf_fwd = 0.0; 
             path.back().pdf_rev = 0.0;
@@ -212,15 +213,9 @@ void BidirectionalPathTracer::generate_camera_path(ray r, std::vector<PathVertex
             color f = rec.mat->evaluate_bsdf(rec, v.wi, scatter_dir);
             double cos_theta = std::abs(dot(rec.normal, scatter_dir));
             
-            // Fix: Explicit multiplication
             beta = beta * (f * cos_theta / pdf_val);
             
-            // Use simplified ray constructor to avoid ambiguity
-            // Assuming ray(origin, direction, time)
             ray scatter_ray(rec.p, scatter_dir, r.time());
-            
-            // IMPORTANT: Ensure scattering_pdf arguments match your material.h
-            // Standard is usually (scattered, rec, incoming)
             ray incoming_ray(rec.p, -v.wi, r.time());
             path.back().pdf_rev = rec.mat->scattering_pdf(scatter_ray, rec, incoming_ray);
 
@@ -240,7 +235,7 @@ void BidirectionalPathTracer::generate_light_path(std::vector<PathVertex>& path)
     light_rec.p = light_sample.position;
     light_rec.normal = light_sample.normal;
     light_rec.mat = light_sample.mat;
-    light_rec.front_face = true; // Assume front face for emission
+    light_rec.front_face = true; 
     
     PathVertex v0;
     v0.rec = light_rec;
@@ -264,8 +259,7 @@ void BidirectionalPathTracer::generate_light_path(std::vector<PathVertex>& path)
     if (cos_theta <= 0) return;
 
     double pdf_dir = cos_theta / pi; 
-    
-    color beta = v0.beta * (cos_theta / pdf_dir); 
+    color beta = v0.beta; 
     
     double pdf_fwd = pdf_dir;
     ray r(light_rec.p + (0.001 * dir), dir, 0.0);
@@ -281,7 +275,7 @@ void BidirectionalPathTracer::generate_light_path(std::vector<PathVertex>& path)
         v.is_delta = rec.mat->is_delta();
         v.is_light = rec.mat->is_emissive();
         v.pdf_fwd = pdf_fwd;
-        v.pdf_rev = 0.0; // Placeholder
+        v.pdf_rev = 0.0; 
 
         path.push_back(v);
 

@@ -332,6 +332,10 @@ class GlassMaterial : public material {
         return true;  // Perfect specular material
     }
 
+    double get_ior() const {
+        return ior;
+    }
+
   private:
 
     static double fresnel_dielectric(double cos_theta_i, double ni, double nt) {
